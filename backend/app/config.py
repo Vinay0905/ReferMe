@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     ALLEN_DEVICE_ID: Optional[str] = None
     ALLEN_BATCH_LIST: Optional[str] = None
     ALLEN_COURSE_ID: Optional[str] = None
+
+    # Multi-Course Tracks
+    COURSE_12TH_ID: str = "363233"
+    COURSE_12TH_NAME: str = "Leader Test Series"
+    COURSE_11TH_ID: str = "cr_SUqkwoRLxGJ1jV8Ix60b3"
+    COURSE_11TH_BATCH_LIST: str = "bt_2Fsslkpec8p0kxgacLsCc"
+    COURSE_11TH_NAME: str = "Nurture Test Series"
+
     DEFAULT_PAGE_SIZE: int = 25
     MAX_PAGES: int = 20  # Safety pagination bound
     MAX_CONCURRENT_REQUESTS: int = 3

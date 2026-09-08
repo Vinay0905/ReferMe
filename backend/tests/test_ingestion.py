@@ -59,6 +59,7 @@ async def test_allen_client_mock_mode():
 def test_allen_client_contextual_headers(monkeypatch):
     from app.config import get_settings
     settings = get_settings()
+    monkeypatch.setattr(settings, "ALLEN_CLIENT_TYPE", "web")
     monkeypatch.setattr(settings, "ALLEN_DEVICE_ID", "device-xyz")
     monkeypatch.setattr(settings, "ALLEN_BATCH_LIST", "batch-1,batch-2")
     monkeypatch.setattr(settings, "ALLEN_COURSE_ID", "course-42")

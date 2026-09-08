@@ -35,6 +35,9 @@ class IngestionOrchestrator:
         test_topic_repo: Optional[TestTopicRepository] = None,
         artifact_repo: Optional[ArtifactRepository] = None,
         job_repo: Optional[IngestionJobRepository] = None,
+        target_class: str = "12th",
+        course_id: Optional[str] = None,
+        course_name: Optional[str] = None,
     ):
         self.allen_client = allen_client or AllenClient()
         self.test_repo = test_repo or TestRepository()
@@ -42,6 +45,9 @@ class IngestionOrchestrator:
         self.test_topic_repo = test_topic_repo or TestTopicRepository()
         self.artifact_repo = artifact_repo or ArtifactRepository()
         self.job_repo = job_repo or IngestionJobRepository()
+        self.target_class = target_class
+        self.course_id = course_id
+        self.course_name = course_name
         self.storage = get_storage_provider()
         self.normalizer = TopicNormalizer()
 
@@ -118,6 +124,9 @@ class IngestionOrchestrator:
             mode=card.mode,
             status=card.status,
             category=card.category,
+            target_class=self.target_class,
+            course_id=self.course_id,
+            course_name=self.course_name,
             processing_status=ProcessingStatus.SYLLABUS_PENDING,
             updated_at=utc_now()
         )
@@ -126,90 +135,81 @@ class IngestionOrchestrator:
 
         # Step 3: Fetch syllabus PDF
         syllabus_pdf_bytes = await self.allen_client.get_syllabus_pdf(external_test_id)
-        if not syllabus_pdf_bytes:
-            logger.warning(f"Syllabus PDF not available for test {external_test_id}.")
-            test_entity.processing_status = ProcessingStatus.FAILED
-            await self.test_repo.upsert(test_entity)
-            job.failed_count += 1
-            job.error_summary.append({"test_id": external_test_id, "error": "Syllabus PDF unavailable"})
-            return
+        if syllabus_pdf_bytes:
+            syllabus_hash = hashlib.sha256(syllabus_pdf_bytes).hexdigest()
 
-        syllabus_hash = hashlib.sha256(syllabus_pdf_bytes).hexdigest()
+            # Step 4: Store syllabus PDF artifact
+            stable_syllabus_key = f"test_{external_test_id}/syllabus.pdf"
+            saved_storage_key = await self.storage.save(stable_syllabus_key, syllabus_pdf_bytes)
 
-        # Step 4: Store syllabus PDF artifact
-        stable_syllabus_key = f"test_{external_test_id}/syllabus.pdf"
-        saved_storage_key = await self.storage.save(stable_syllabus_key, syllabus_pdf_bytes)
-
-        artifact = ArtifactModel(
-            test_id=test_id,
-            external_test_id=external_test_id,
-            kind=ArtifactKind.SYLLABUS,
-            source="allen",
-            stable_object_key=stable_syllabus_key,
-            storage_provider="local",
-            storage_key=saved_storage_key,
-            sha256=syllabus_hash,
-            content_type="application/pdf",
-            size_bytes=len(syllabus_pdf_bytes),
-            updated_at=utc_now()
-        )
-        await self.artifact_repo.upsert_artifact(artifact)
-        test_entity.has_syllabus = True
-
-        # Step 5: Extract and parse syllabus text
-        extraction = PDFTextExtractor.extract(syllabus_pdf_bytes)
-        parsed_syllabus = SyllabusParser.parse(extraction)
-
-        if not parsed_syllabus.is_valid:
-            logger.warning(f"Failed to parse topics from syllabus for test {external_test_id}: {parsed_syllabus.warning}")
-            test_entity.processing_status = ProcessingStatus.PARTIAL
-            await self.test_repo.upsert(test_entity)
-            job.partial_count += 1
-            return
-
-        # Step 6: Normalize topics & construct relationships
-        normalized_topics = self.normalizer.normalize_all(parsed_syllabus.topics)
-        relationships: List[TestTopicModel] = []
-
-        for norm in normalized_topics:
-            # Upsert canonical topic in Topic collection
-            topic_entity = TopicModel(
-                subject=norm.subject,
-                name=norm.name,
-                canonical_key=norm.canonical_key,
-                updated_at=utc_now()
-            )
-            canonical_topic_id = await self.topic_repo.upsert_canonical(topic_entity)
-
-            # Build relationship document
-            rel = TestTopicModel(
+            artifact = ArtifactModel(
                 test_id=test_id,
                 external_test_id=external_test_id,
-                topic_id=canonical_topic_id,
-                canonical_key=norm.canonical_key,
-                subject=norm.subject,
-                source_text=norm.raw_source_text,
-                source_section=norm.section_name,
-                normalization_method=norm.method,
-                normalization_version=SyllabusParser.VERSION,
-                confidence=norm.confidence
+                kind=ArtifactKind.SYLLABUS,
+                source="allen",
+                stable_object_key=stable_syllabus_key,
+                storage_provider="local",
+                storage_key=saved_storage_key,
+                sha256=syllabus_hash,
+                content_type="application/pdf",
+                size_bytes=len(syllabus_pdf_bytes),
+                updated_at=utc_now()
             )
-            relationships.append(rel)
+            await self.artifact_repo.upsert_artifact(artifact)
+            test_entity.has_syllabus = True
 
-        # Step 7: Atomically replace relations for this test
-        # Track old topic IDs first to prevent stale counts if topics were removed/re-parsed
-        existing_rels = await self.test_topic_repo.find_by_test_id(test_id)
-        old_topic_ids = {r.topic_id for r in existing_rels if r.topic_id}
+            # Step 5: Extract and parse syllabus text
+            extraction = PDFTextExtractor.extract(syllabus_pdf_bytes)
+            parsed_syllabus = SyllabusParser.parse(extraction)
 
-        await self.test_topic_repo.replace_for_test(test_id, relationships)
+            if parsed_syllabus.is_valid:
+                # Step 6: Normalize topics & construct relationships
+                normalized_topics = self.normalizer.normalize_all(parsed_syllabus.topics)
+                relationships: List[TestTopicModel] = []
 
-        # Step 8: Update topic counts for all affected topics (union of old and new)
-        new_topic_ids = {r.topic_id for r in relationships if r.topic_id}
-        affected_topic_ids = old_topic_ids.union(new_topic_ids)
+                for norm in normalized_topics:
+                    # Upsert canonical topic in Topic collection
+                    topic_entity = TopicModel(
+                        subject=norm.subject,
+                        name=norm.name,
+                        canonical_key=norm.canonical_key,
+                        target_classes=[self.target_class] if self.target_class else [],
+                        updated_at=utc_now()
+                    )
+                    canonical_topic_id = await self.topic_repo.upsert_canonical(topic_entity, target_class=self.target_class)
 
-        for affected_id in affected_topic_ids:
-            count = await self.test_topic_repo.count({"topic_id": affected_id})
-            await self.topic_repo.update_test_count(affected_id, count)
+                    # Build relationship document
+                    rel = TestTopicModel(
+                        test_id=test_id,
+                        external_test_id=external_test_id,
+                        topic_id=canonical_topic_id,
+                        canonical_key=norm.canonical_key,
+                        subject=norm.subject,
+                        source_text=norm.raw_source_text,
+                        source_section=norm.section_name,
+                        normalization_method=norm.method,
+                        normalization_version=SyllabusParser.VERSION,
+                        confidence=norm.confidence
+                    )
+                    relationships.append(rel)
+
+                # Step 7: Atomically replace relations for this test
+                existing_rels = await self.test_topic_repo.find_by_test_id(test_id)
+                old_topic_ids = {r.topic_id for r in existing_rels if r.topic_id}
+
+                await self.test_topic_repo.replace_for_test(test_id, relationships)
+
+                # Step 8: Update topic counts for all affected topics
+                new_topic_ids = {r.topic_id for r in relationships if r.topic_id}
+                affected_topic_ids = old_topic_ids.union(new_topic_ids)
+
+                for affected_id in affected_topic_ids:
+                    count = await self.test_topic_repo.count({"topic_id": affected_id})
+                    await self.topic_repo.update_test_count(affected_id, count)
+            else:
+                logger.warning(f"Failed to parse topics from syllabus for test {external_test_id}: {parsed_syllabus.warning}")
+        else:
+            logger.warning(f"Syllabus PDF not available for test {external_test_id}.")
 
         # Step 9: Attempt question paper acquisition
         qp_bytes = await self.allen_client.get_question_paper_pdf(external_test_id)
@@ -231,13 +231,17 @@ class IngestionOrchestrator:
             await self.artifact_repo.upsert_artifact(qp_artifact)
             test_entity.has_question_paper = True
 
-        # Step 10: Mark test READY (or PARTIAL if question paper is missing)
+        # Step 10: Mark test status
         if test_entity.has_syllabus and test_entity.has_question_paper:
             test_entity.processing_status = ProcessingStatus.READY
             job.succeeded_count += 1
-        else:
+        elif test_entity.has_syllabus or test_entity.has_question_paper:
             test_entity.processing_status = ProcessingStatus.PARTIAL
             job.partial_count += 1
+        else:
+            test_entity.processing_status = ProcessingStatus.FAILED
+            job.failed_count += 1
+            job.error_summary.append({"test_id": external_test_id, "error": "Neither syllabus nor question paper available"})
 
         await self.test_repo.upsert(test_entity)
-        logger.info(f"Successfully processed test {external_test_id}: {len(relationships)} topics indexed.")
+        logger.info(f"Successfully processed test {external_test_id}: syllabus={test_entity.has_syllabus}, qp={test_entity.has_question_paper}.")

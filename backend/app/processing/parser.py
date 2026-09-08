@@ -48,6 +48,14 @@ class SyllabusParser:
         re.compile(r"^max(?:imum)?\s+marks\s*:\s*\d+", re.IGNORECASE),
     ]
 
+    # Patterns identifying table metadata, disclaimers, and contact info
+    DISCLAIMER_PATTERNS = [
+        re.compile(r"\b(?:timing\s+and\s+pattern|test\s+pattern|test\s+time|test\s+syllabus|target\s+neet|course\s+name|joint\s+package)\b", re.IGNORECASE),
+        re.compile(r"\b(?:declared\s+by\s+the\s+exam|exam\s+governing\s+body|informed\s+on\s+time|di\s*er\s+according)\b", re.IGNORECASE),
+        re.compile(r"\b(?:dlp@|www\.dlp|\+91\b|\b\d{6,}\b)", re.IGNORECASE),
+        re.compile(r"^\s*date\s*$", re.IGNORECASE),
+    ]
+
     @classmethod
     def parse(cls, extraction: ExtractionResult) -> ParsedSyllabus:
         if not extraction.has_extractable_text:
@@ -222,6 +230,13 @@ class SyllabusParser:
 
             for item in raw_items:
                 clean_item = item.strip()
+                # Strip trailing disclaimer if attached to last topic
+                clean_item = re.split(
+                    r"\s*(?:\*?\s*if\s+there\s+are\s+changes|note\s*:|declared\s+by\s+the\s+exam|on\s+time\.\s*declared)\b",
+                    clean_item,
+                    flags=re.IGNORECASE
+                )[0].strip()
+
                 # Remove leading numbering like "1. ", "a) ", "(i) ", "- "
                 clean_item = re.sub(r"^(?:(?:\d+|[a-zA-Z]|\([a-zA-Z0-9]+\))[\.\)]|\-|\*)\s*", "", clean_item).strip()
                 # Remove any accidental leading subject labels (e.g. "CHEMISTRY: ", "BIOLOGY: ")
@@ -250,6 +265,10 @@ class SyllabusParser:
                     continue
 
                 if re.match(r"^(?:section\s+[ab]|total\s+marks|part\s+\d+|optional)\b", clean_item, re.IGNORECASE):
+                    continue
+
+                # Filter out table metadata, schedule boilerplate, contact numbers, and dates
+                if any(dp.search(clean_item) for dp in cls.DISCLAIMER_PATTERNS):
                     continue
 
                 results.append(ParsedTopic(

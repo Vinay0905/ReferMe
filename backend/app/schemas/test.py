@@ -13,6 +13,9 @@ class TestResponse(BaseModel):
     mode: Optional[str] = None
     status: Optional[str] = None
     category: Optional[str] = None
+    target_class: Optional[str] = "12th"
+    course_id: Optional[str] = None
+    course_name: Optional[str] = None
     processing_status: ProcessingStatus
     has_syllabus: bool = False
     has_question_paper: bool = False

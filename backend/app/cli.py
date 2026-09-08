@@ -14,6 +14,9 @@ logging.basicConfig(
 logger = logging.getLogger("referme.cli")
 
 
+from app.config import get_settings
+
+
 async def run_ingest(args):
     print("=" * 65)
     print("ALLEN NEET Test ↔ Topic Intelligence System: Ingestion Runner")
@@ -28,34 +31,83 @@ async def run_ingest(args):
     elif args.live:
         mock_mode = False
 
-    client = AllenClient(mock_mode=mock_mode)
-    print(f"Mode: {'MOCK (Offline Fixtures)' if client.mock_mode else 'LIVE (api.allen-live.in)'}")
-    print(f"Status Filter: {args.status}")
-    print(f"Mode Filter: {args.mode}")
-    if args.limit:
-        print(f"Test Limit: {args.limit}")
-    print("-" * 65)
+    settings = get_settings()
+    course_arg = getattr(args, "course", "12th").lower()
+    courses_to_run = []
 
-    orchestrator = IngestionOrchestrator(allen_client=client)
-    job = await orchestrator.run(
-        status=args.status,
-        mode=args.mode,
-        max_tests=args.limit
-    )
+    if course_arg in ["11th", "11", "nurture"]:
+        courses_to_run.append({
+            "target_class": "11th",
+            "course_id": settings.COURSE_11TH_ID,
+            "batch_list": settings.COURSE_11TH_BATCH_LIST,
+            "course_name": settings.COURSE_11TH_NAME,
+            "client_type": "mweb",
+        })
+    elif course_arg in ["12th", "12", "leader"]:
+        courses_to_run.append({
+            "target_class": "12th",
+            "course_id": settings.COURSE_12TH_ID,
+            "batch_list": settings.ALLEN_BATCH_LIST,
+            "course_name": settings.COURSE_12TH_NAME,
+            "client_type": "web",
+        })
+    elif course_arg in ["all", "both"]:
+        courses_to_run.append({
+            "target_class": "12th",
+            "course_id": settings.COURSE_12TH_ID,
+            "batch_list": settings.ALLEN_BATCH_LIST,
+            "course_name": settings.COURSE_12TH_NAME,
+            "client_type": "web",
+        })
+        courses_to_run.append({
+            "target_class": "11th",
+            "course_id": settings.COURSE_11TH_ID,
+            "batch_list": settings.COURSE_11TH_BATCH_LIST,
+            "course_name": settings.COURSE_11TH_NAME,
+            "client_type": "mweb",
+        })
 
-    print("-" * 65)
-    print(f"Ingestion Job Completed!")
-    print(f"Job ID: {job.id}")
-    print(f"Final Status: {job.status.value}")
-    print(f"Tests Discovered: {job.discovered_count}")
-    print(f"Tests Succeeded: {job.succeeded_count}")
-    print(f"Tests Partial: {job.partial_count}")
-    print(f"Tests Failed: {job.failed_count}")
-    if job.error_summary:
-        print("\nErrors encountered:")
-        for err in job.error_summary:
-            print(f"  - {err}")
-    print("=" * 65)
+    for c_info in courses_to_run:
+        print(f"\n>>> Running Ingestion for Course: {c_info['course_name']} ({c_info['target_class']})")
+        print(f"Course ID: {c_info['course_id']} | Batch List: {c_info['batch_list']}")
+        client = AllenClient(
+            mock_mode=mock_mode,
+            course_id=c_info["course_id"],
+            batch_list=c_info["batch_list"],
+            client_type=c_info["client_type"],
+        )
+        print(f"Mode: {'MOCK (Offline Fixtures)' if client.mock_mode else 'LIVE (api.allen-live.in)'}")
+        print(f"Status Filter: {args.status}")
+        print(f"Mode Filter: {args.mode}")
+        if args.limit:
+            print(f"Test Limit: {args.limit}")
+        print("-" * 65)
+
+        orchestrator = IngestionOrchestrator(
+            allen_client=client,
+            target_class=c_info["target_class"],
+            course_id=c_info["course_id"],
+            course_name=c_info["course_name"],
+        )
+        job = await orchestrator.run(
+            status=args.status,
+            mode=args.mode,
+            max_tests=args.limit
+        )
+
+        print("-" * 65)
+        print(f"Ingestion Job Completed for {c_info['course_name']} ({c_info['target_class']})!")
+        print(f"Job ID: {job.id}")
+        print(f"Final Status: {job.status.value}")
+        print(f"Tests Discovered: {job.discovered_count}")
+        print(f"Tests Succeeded: {job.succeeded_count}")
+        print(f"Tests Partial: {job.partial_count}")
+        print(f"Tests Failed: {job.failed_count}")
+        if job.error_summary:
+            print("\nErrors encountered:")
+            for err in job.error_summary:
+                print(f"  - {err}")
+        print("=" * 65)
 
     await close_mongo_connection()
 
@@ -109,6 +161,7 @@ def main():
 
     # Ingestion command
     ingest_parser = subparsers.add_parser("ingest", help="Run the test & syllabus ingestion pipeline")
+    ingest_parser.add_argument("--course", "--class", dest="course", type=str, default="12th", choices=["11th", "12th", "all"], help="Course track: 11th (Nurture), 12th (Leader), or all (default: 12th)")
     ingest_parser.add_argument("--limit", type=int, default=None, help="Maximum number of tests to process")
     ingest_parser.add_argument("--status", type=str, default="all", help="Test status filter (default: all)")
     ingest_parser.add_argument("--mode", type=str, default="all", help="Test mode filter (default: all)")

@@ -20,11 +20,16 @@ class TopicRepository(BaseRepository[TopicModel]):
             return topic
         return await self.get_by_canonical_key(identifier)
 
-    async def upsert_canonical(self, topic: TopicModel) -> str:
-        """Upserts a topic by canonical_key. Preserves existing test_count."""
+    async def upsert_canonical(self, topic: TopicModel, target_class: Optional[str] = None) -> str:
+        """Upserts a topic by canonical_key. Preserves existing test_count and tracks target_classes."""
         existing = await self.get_by_canonical_key(topic.canonical_key)
         if existing:
+            if target_class:
+                query = {"_id": ObjectId(str(existing.id))}
+                await self.collection.update_one(query, {"$addToSet": {"target_classes": target_class}})
             return str(existing.id)
+        if target_class and target_class not in topic.target_classes:
+            topic.target_classes.append(target_class)
         doc = topic.model_dump(by_alias=True, exclude={"id"})
         result = await self.collection.insert_one(doc)
         return str(result.inserted_id)

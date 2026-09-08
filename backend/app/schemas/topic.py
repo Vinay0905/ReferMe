@@ -12,6 +12,7 @@ class TopicResponse(BaseModel):
     canonical_key: str
     aliases: List[str] = Field(default_factory=list)
     test_count: int = 0
+    target_classes: List[str] = Field(default_factory=list)
     active: bool = True
     created_at: datetime
     updated_at: datetime
@@ -26,6 +27,7 @@ class TopicTestItem(BaseModel):
     mode: Optional[str] = None
     status: Optional[str] = None
     category: Optional[str] = None
+    target_class: Optional[str] = "12th"
     has_syllabus: bool = False
     has_question_paper: bool = False
     source_text: Optional[str] = None

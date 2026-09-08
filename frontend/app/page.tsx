@@ -8,12 +8,13 @@ import { TestCard } from "@/components/TestCard";
 import { CleanHud } from "@/components/CleanHud";
 import { PdfStudio } from "@/components/PdfStudio";
 import { TopicDetailStudio } from "@/components/TopicDetailStudio";
-import { RefreshCw, AlertCircle } from "lucide-react";
+import { RefreshCw, AlertCircle, GraduationCap } from "lucide-react";
 
 export default function StudioPage() {
   const [viewMode, setViewMode] = useState<"topics" | "tests">("topics");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedSubject, setSelectedSubject] = useState<string>("all");
+  const [selectedClass, setSelectedClass] = useState<"all" | "12th" | "11th">("12th");
 
   const [tests, setTests] = useState<TestItem[]>([]);
   const [topics, setTopics] = useState<TopicItem[]>([]);
@@ -68,15 +69,21 @@ export default function StudioPage() {
   // Filtered Tests
   const filteredTests = useMemo(() => {
     return tests.filter((t) => {
+      // If target_class is specified on test, filter accordingly; otherwise default to 12th (Leader)
+      const testClass = t.target_class?.toLowerCase() || "12th";
+      const matchesClass =
+        selectedClass === "all" || testClass === selectedClass.toLowerCase();
+
       const q = searchQuery.toLowerCase().trim();
-      return (
+      const matchesQuery =
         !q ||
         t.name.toLowerCase().includes(q) ||
         t.external_test_id.toLowerCase().includes(q) ||
-        (t.category && t.category.toLowerCase().includes(q))
-      );
+        (t.category && t.category.toLowerCase().includes(q));
+
+      return matchesClass && matchesQuery;
     });
-  }, [tests, searchQuery]);
+  }, [tests, selectedClass, searchQuery]);
 
   // Select a Test
   const handleSelectTest = async (test: TestItem, kind: "syllabus" | "question_paper" = "syllabus") => {
@@ -142,8 +149,10 @@ export default function StudioPage() {
             setSearchQuery={setSearchQuery}
             selectedSubject={selectedSubject}
             setSelectedSubject={setSelectedSubject}
+            selectedClass={selectedClass}
+            setSelectedClass={setSelectedClass}
             topicsCount={topics.length}
-            testsCount={tests.length}
+            testsCount={filteredTests.length}
           />
 
           {/* Connection Error Banner */}
@@ -203,14 +212,35 @@ export default function StudioPage() {
           ) : (
             /* TESTS STREAM */
             filteredTests.length === 0 ? (
-              <div className="text-center py-16 rounded-2xl bg-[#3E0F8D]/10 border border-[#9564DD]/20">
-                <p className="text-[#EEEEEE]/50 text-sm">No tests match your query.</p>
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="mt-3 px-4 py-1.5 rounded-lg bg-[#3E0F8D] hover:bg-[#9564DD] text-xs text-[#EEEEEE]"
-                >
-                  Clear Search
-                </button>
+              <div className="text-center py-16 px-6 rounded-2xl bg-[#3E0F8D]/10 border border-[#9564DD]/20 flex flex-col items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-[#3E0F8D]/40 border border-[#9564DD] flex items-center justify-center shadow-neon-purple">
+                  <GraduationCap className="w-6 h-6 text-[#E4DA72]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-[#EEEEEE]">
+                    {selectedClass === "11th" ? "Class 11th • Nurture Test Series (363131)" : "No tests match your query"}
+                  </h3>
+                  <p className="text-xs text-[#EEEEEE]/60 max-w-md mt-1">
+                    {selectedClass === "11th"
+                      ? "Class 11th course selected. Switch to Class 11th in your ALLEN portal tab, or click below to view Class 12th tests."
+                      : "Try resetting your search query or mode filters."}
+                  </p>
+                </div>
+                {selectedClass === "11th" ? (
+                  <button
+                    onClick={() => setSelectedClass("12th")}
+                    className="mt-2 px-4 py-2 rounded-xl bg-[#3E0F8D] hover:bg-[#9564DD] border border-[#9564DD] text-xs font-semibold text-[#EEEEEE] transition-all shadow-md"
+                  >
+                    View Class 12th (Leader) Tests
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="mt-3 px-4 py-1.5 rounded-lg bg-[#3E0F8D] hover:bg-[#9564DD] text-xs text-[#EEEEEE]"
+                  >
+                    Clear Search
+                  </button>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-12">

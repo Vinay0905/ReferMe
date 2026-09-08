@@ -24,6 +24,7 @@ def _to_topic_response(topic: TopicModel) -> TopicResponse:
         canonical_key=topic.canonical_key,
         aliases=topic.aliases,
         test_count=topic.test_count,
+        target_classes=getattr(topic, "target_classes", []) or [],
         active=topic.active,
         created_at=topic.created_at,
         updated_at=topic.updated_at,
@@ -34,6 +35,7 @@ def _to_topic_response(topic: TopicModel) -> TopicResponse:
 async def list_topics(
     q: Optional[str] = Query(None, description="Search topics by name, canonical key, or alias"),
     subject: Optional[str] = Query(None, description="Filter by subject: physics, chemistry, biology"),
+    target_class: Optional[str] = Query(None, description="Filter by target class (e.g. '11th', '12th')"),
     sort_by: str = Query("test_count", description="Field to sort by: test_count, name, created_at"),
     order: str = Query("desc", description="Sort order: asc, desc"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
@@ -45,6 +47,9 @@ async def list_topics(
 
     if subject:
         filter_query["subject"] = {"$regex": f"^{re.escape(subject.strip())}$", "$options": "i"}
+
+    if target_class and target_class.lower() != "all":
+        filter_query["target_classes"] = target_class
 
     if q:
         escaped_q = re.escape(q.strip())
@@ -122,6 +127,7 @@ async def get_topic_tests(
                     mode=test_doc.mode,
                     status=test_doc.status,
                     category=test_doc.category,
+                    target_class=getattr(test_doc, "target_class", "12th") or "12th",
                     has_syllabus=test_doc.has_syllabus,
                     has_question_paper=test_doc.has_question_paper,
                     source_text=r.source_text,

@@ -97,11 +97,22 @@ class PDFTextExtractor:
                     if getattr(first_page, "width", 0) > 700:
                         words = first_page.extract_words()
                         if words:
-                            words_sorted = sorted(words, key=lambda w: (w["top"], w["x0"]))
+                            header_words = [w for w in words if w["text"].upper() in ["PHYSICS", "CHEMISTRY", "BIOLOGY"]]
+                            header_top = min(w["top"] for w in header_words) if header_words else 0
+                            footer_words = [w for w in words if w["top"] > 450 and any(k in w["text"].lower() for k in ["changes", "schedule", "governing", "+91-", "dlp@"])]
+                            footer_top = min(w["top"] for w in footer_words) if footer_words else getattr(first_page, "height", 1000)
+
+                            words_filtered = [
+                                w for w in words
+                                if (header_top == 0 or header_top - 5 <= w["top"])
+                                and w["bottom"] <= footer_top + 2
+                                and "allen" not in w["text"].lower()
+                            ]
+                            words_sorted = sorted(words_filtered, key=lambda w: (w["top"], w["x0"]))
                             # Column boundaries: Col 1 (<300), Col 2 (300-550), Col 3 (>550)
-                            col_physics = [w["text"] for w in words_sorted if w["x0"] < 300 and "allen" not in w["text"].lower()]
-                            col_chemistry = [w["text"] for w in words_sorted if 300 <= w["x0"] < 550 and "allen" not in w["text"].lower()]
-                            col_biology = [w["text"] for w in words_sorted if w["x0"] >= 550 and "allen" not in w["text"].lower()]
+                            col_physics = [w["text"] for w in words_sorted if w["x0"] < 300]
+                            col_chemistry = [w["text"] for w in words_sorted if 300 <= w["x0"] < 550]
+                            col_biology = [w["text"] for w in words_sorted if w["x0"] >= 550]
 
                             # Require significant content across all three columns to qualify as landscape 3-column
                             if len(col_physics) > 3 and len(col_chemistry) > 3 and len(col_biology) > 3:

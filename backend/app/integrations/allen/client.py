@@ -38,30 +38,42 @@ class AllenClient:
         base_url: Optional[str] = None,
         auth_token: Optional[str] = None,
         mock_mode: Optional[bool] = None,
-        timeout: Optional[float] = None
+        timeout: Optional[float] = None,
+        course_id: Optional[str] = None,
+        batch_list: Optional[str] = None,
+        client_type: Optional[str] = None,
     ):
         settings = get_settings()
         self.base_url = (base_url or settings.ALLEN_BASE_URL).rstrip("/")
         self.auth_token = auth_token if auth_token is not None else settings.ALLEN_AUTH_TOKEN
         self.mock_mode = mock_mode if mock_mode is not None else (settings.ALLEN_MOCK_MODE or not bool(self.auth_token))
         self.timeout = timeout or settings.REQUEST_TIMEOUT_SECONDS
+        self.course_id = course_id or settings.ALLEN_COURSE_ID
+        self.batch_list = batch_list or settings.ALLEN_BATCH_LIST
+        self.client_type = client_type or settings.ALLEN_CLIENT_TYPE
 
     def _get_headers(self) -> Dict[str, str]:
         headers = {
             "Accept": "application/json, text/plain, */*",
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            "User-Agent": "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Mobile Safari/537.36",
             "Referer": "https://allen.in/",
             "Origin": "https://allen.in",
         }
         settings = get_settings()
-        if settings.ALLEN_CLIENT_TYPE:
-            headers["x-client-type"] = settings.ALLEN_CLIENT_TYPE
+        client_type = self.client_type or settings.ALLEN_CLIENT_TYPE
+        if client_type:
+            headers["x-client-type"] = client_type
         if settings.ALLEN_DEVICE_ID:
             headers["x-device-id"] = settings.ALLEN_DEVICE_ID
-        if settings.ALLEN_BATCH_LIST:
-            headers["x-selected-batch-list"] = settings.ALLEN_BATCH_LIST
-        if settings.ALLEN_COURSE_ID:
-            headers["x-selected-course-id"] = settings.ALLEN_COURSE_ID
+        
+        batch_list = self.batch_list or settings.ALLEN_BATCH_LIST
+        if batch_list:
+            headers["x-selected-batch-list"] = batch_list
+
+        course_id = self.course_id or settings.ALLEN_COURSE_ID
+        if course_id:
+            headers["x-selected-course-id"] = course_id
+
         if self.auth_token:
             headers["Authorization"] = f"Bearer {self.auth_token}"
         return headers
@@ -208,9 +220,13 @@ class AllenClient:
                 return None
 
             # Download the binary PDF
-            pdf_resp = await client.get(s3_url)
-            pdf_resp.raise_for_status()
-            return PDFTextExtractor.sanitize_pdf_bytes(pdf_resp.content)
+            try:
+                pdf_resp = await client.get(s3_url)
+                pdf_resp.raise_for_status()
+                return PDFTextExtractor.sanitize_pdf_bytes(pdf_resp.content)
+            except Exception as pdf_err:
+                logger.warning(f"Failed to download syllabus PDF for test {test_id} from {s3_url}: {pdf_err}")
+                return None
 
     async def get_question_paper_pdf(self, test_id: str) -> Optional[bytes]:
         """Fetches the question paper / solution PDF from result-insights endpoint."""
@@ -249,6 +265,10 @@ class AllenClient:
             if not s3_url:
                 return None
 
-            pdf_resp = await client.get(s3_url)
-            pdf_resp.raise_for_status()
-            return PDFTextExtractor.sanitize_pdf_bytes(pdf_resp.content)
+            try:
+                pdf_resp = await client.get(s3_url)
+                pdf_resp.raise_for_status()
+                return PDFTextExtractor.sanitize_pdf_bytes(pdf_resp.content)
+            except Exception as e:
+                logger.warning(f"Could not download question paper PDF for test {test_id} from {s3_url}: {e}")
+                return None

@@ -14,6 +14,9 @@ class TestModel(BaseMongoModel):
     mode: Optional[str] = None  # e.g., "Offline", "Online"
     status: Optional[str] = None  # e.g., "UPCOMING", "FINAL_RESULT_GENERATED"
     category: Optional[str] = None  # e.g., "DLP", "MINOR", "MAJOR"
+    target_class: Optional[str] = "12th"  # e.g., "12th", "11th"
+    course_id: Optional[str] = None
+    course_name: Optional[str] = None
     processing_status: ProcessingStatus = ProcessingStatus.DISCOVERED
     has_syllabus: bool = False
     has_question_paper: bool = False

@@ -26,6 +26,9 @@ def _to_test_response(test: TestModel) -> TestResponse:
         mode=test.mode,
         status=test.status,
         category=test.category,
+        target_class=getattr(test, "target_class", "12th") or "12th",
+        course_id=getattr(test, "course_id", None),
+        course_name=getattr(test, "course_name", None),
         processing_status=test.processing_status,
         has_syllabus=test.has_syllabus,
         has_question_paper=test.has_question_paper,
@@ -40,6 +43,7 @@ async def list_tests(
     status: Optional[str] = Query(None, description="Filter by status (e.g., UPCOMING, FINAL_RESULT_GENERATED)"),
     mode: Optional[str] = Query(None, description="Filter by mode (e.g., Offline, Online)"),
     category: Optional[str] = Query(None, description="Filter by category (e.g., DLP, MINOR)"),
+    target_class: Optional[str] = Query(None, description="Filter by class: '12th' or '11th'"),
     has_syllabus: Optional[bool] = Query(None, description="Filter by syllabus availability"),
     has_question_paper: Optional[bool] = Query(None, description="Filter by question paper availability"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
@@ -57,6 +61,8 @@ async def list_tests(
         filter_query["mode"] = {"$regex": f"^{re.escape(mode.strip())}$", "$options": "i"}
     if category:
         filter_query["category"] = {"$regex": f"^{re.escape(category.strip())}$", "$options": "i"}
+    if target_class and target_class.lower() != "all":
+        filter_query["target_class"] = {"$regex": f"^{re.escape(target_class.strip())}$", "$options": "i"}
     if has_syllabus is not None:
         filter_query["has_syllabus"] = has_syllabus
     if has_question_paper is not None:
