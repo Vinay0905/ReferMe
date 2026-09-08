@@ -21,6 +21,7 @@ async def connect_to_mongo():
         settings.MONGODB_URI,
         serverSelectionTimeoutMS=5000
     )
+    db_context.db = db_context.client[settings.MONGODB_DB_NAME]
     try:
         # Verify connection
         await db_context.db.command("ping")
