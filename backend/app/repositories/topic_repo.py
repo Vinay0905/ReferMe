@@ -14,6 +14,12 @@ class TopicRepository(BaseRepository[TopicModel]):
             return self.model_cls(**doc)
         return None
 
+    async def get_by_id_or_canonical_key(self, identifier: str) -> Optional[TopicModel]:
+        topic = await self.get_by_id(identifier)
+        if topic:
+            return topic
+        return await self.get_by_canonical_key(identifier)
+
     async def upsert_canonical(self, topic: TopicModel) -> str:
         """Upserts a topic by canonical_key. Preserves existing test_count."""
         existing = await self.get_by_canonical_key(topic.canonical_key)

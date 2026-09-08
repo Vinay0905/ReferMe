@@ -18,6 +18,14 @@ class TestRepository(BaseRepository[TestModel]):
             return self.model_cls(**doc)
         return None
 
+    async def get_by_id_or_external_id(self, identifier: str) -> Optional[TestModel]:
+        # Try as ObjectId first
+        test = await self.get_by_id(identifier)
+        if test:
+            return test
+        # Try as allen external_test_id
+        return await self.get_by_external_id("allen", identifier)
+
     async def upsert(self, test: TestModel) -> str:
         doc = test.model_dump(by_alias=True, exclude={"id"})
         result = await self.collection.update_one(
