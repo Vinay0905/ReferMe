@@ -1,6 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,7 +27,12 @@ class Settings(BaseSettings):
     ALLEN_BASE_URL: str = "https://api.allen-live.in"
     ALLEN_AUTH_TOKEN: str = ""  # Bearer token from user session
     ALLEN_MOCK_MODE: bool = False  # When True or when token is empty, uses mock data
+    ALLEN_CLIENT_TYPE: str = "web"
+    ALLEN_DEVICE_ID: Optional[str] = None
+    ALLEN_BATCH_LIST: Optional[str] = None
+    ALLEN_COURSE_ID: Optional[str] = None
     DEFAULT_PAGE_SIZE: int = 25
+    MAX_PAGES: int = 20  # Safety pagination bound
     MAX_CONCURRENT_REQUESTS: int = 3
     REQUEST_TIMEOUT_SECONDS: int = 30
 

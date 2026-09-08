@@ -62,8 +62,8 @@ class IngestionOrchestrator:
         logger.info(f"Starting Ingestion Job {job_id} (status={status}, mode={mode})...")
 
         try:
-            # Step 1: Discover test cards
-            test_cards = await self.allen_client.list_tests(status=status, mode=mode)
+            # Step 1: Discover test cards (across all available pages)
+            test_cards = await self.allen_client.list_all_tests(status=status, mode=mode)
             if max_tests:
                 test_cards = test_cards[:max_tests]
 
@@ -197,19 +197,19 @@ class IngestionOrchestrator:
             relationships.append(rel)
 
         # Step 7: Atomically replace relations for this test
+        # Track old topic IDs first to prevent stale counts if topics were removed/re-parsed
+        existing_rels = await self.test_topic_repo.find_by_test_id(test_id)
+        old_topic_ids = {r.topic_id for r in existing_rels if r.topic_id}
+
         await self.test_topic_repo.replace_for_test(test_id, relationships)
 
-        # Step 8: Update topic counts
-        for norm in normalized_topics:
-            topic_rec = await self.topic_repo.get_by_canonical_key(norm.canonical_key)
-            if topic_rec:
-                # Count current test references
-                count = await self.test_topic_repo.count({"topic_id": str(topic_rec.id)})
-                topic_rec.test_count = count
-                await self.topic_repo.collection.update_one(
-                    {"canonical_key": norm.canonical_key},
-                    {"$set": {"test_count": count}}
-                )
+        # Step 8: Update topic counts for all affected topics (union of old and new)
+        new_topic_ids = {r.topic_id for r in relationships if r.topic_id}
+        affected_topic_ids = old_topic_ids.union(new_topic_ids)
+
+        for affected_id in affected_topic_ids:
+            count = await self.test_topic_repo.count({"topic_id": affected_id})
+            await self.topic_repo.update_test_count(affected_id, count)
 
         # Step 9: Attempt question paper acquisition
         qp_bytes = await self.allen_client.get_question_paper_pdf(external_test_id)

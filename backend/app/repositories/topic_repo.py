@@ -26,3 +26,7 @@ class TopicRepository(BaseRepository[TopicModel]):
     async def increment_test_count(self, topic_id: str, count: int = 1):
         query = {"_id": ObjectId(topic_id) if ObjectId.is_valid(topic_id) else topic_id}
         await self.collection.update_one(query, {"$inc": {"test_count": count}})
+
+    async def update_test_count(self, topic_id: str, count: int):
+        query = {"_id": ObjectId(topic_id) if ObjectId.is_valid(topic_id) else topic_id}
+        await self.collection.update_one(query, {"$set": {"test_count": count}})

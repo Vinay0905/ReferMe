@@ -53,6 +53,15 @@ class AllenClient:
             "Referer": "https://allen.in/",
             "Origin": "https://allen.in",
         }
+        settings = get_settings()
+        if settings.ALLEN_CLIENT_TYPE:
+            headers["x-client-type"] = settings.ALLEN_CLIENT_TYPE
+        if settings.ALLEN_DEVICE_ID:
+            headers["x-device-id"] = settings.ALLEN_DEVICE_ID
+        if settings.ALLEN_BATCH_LIST:
+            headers["x-selected-batch-list"] = settings.ALLEN_BATCH_LIST
+        if settings.ALLEN_COURSE_ID:
+            headers["x-selected-course-id"] = settings.ALLEN_COURSE_ID
         if self.auth_token:
             headers["Authorization"] = f"Bearer {self.auth_token}"
         return headers
@@ -113,7 +122,7 @@ class AllenClient:
         page_number: int = 1,
         page_size: int = 25
     ) -> List[RawAllenTestCard]:
-        """Fetches the student test catalog."""
+        """Fetches a single page of the student test catalog."""
         if self.mock_mode:
             logger.info("AllenClient: operating in MOCK mode (returning fixture tests).")
             return [self.parse_test_card(c) for c in MOCK_ALLEN_TEST_CARDS]
@@ -132,8 +141,52 @@ class AllenClient:
             resp.raise_for_status()
             data = resp.json()
 
-        cards = data.get("data", {}).get("cards", [])
+        payload = data.get("data") or {}
+        cards = payload.get("cards") or []
         return [self.parse_test_card(c) for c in cards]
+
+    async def list_all_tests(
+        self,
+        status: str = "all",
+        mode: str = "all",
+        page_size: Optional[int] = None,
+        max_pages: Optional[int] = None
+    ) -> List[RawAllenTestCard]:
+        """Fetches all tests across pages until no further cards are returned."""
+        if self.mock_mode:
+            return await self.list_tests(status=status, mode=mode)
+
+        settings = get_settings()
+        effective_page_size = page_size or settings.DEFAULT_PAGE_SIZE
+        effective_max_pages = max_pages or settings.MAX_PAGES
+
+        all_cards: List[RawAllenTestCard] = []
+        seen_test_ids = set()
+
+        for page in range(1, effective_max_pages + 1):
+            page_cards = await self.list_tests(
+                status=status,
+                mode=mode,
+                page_number=page,
+                page_size=effective_page_size
+            )
+            if not page_cards:
+                logger.info(f"No cards returned on page {page}. Concluding pagination.")
+                break
+
+            new_in_page = 0
+            for card in page_cards:
+                if card.test_id not in seen_test_ids:
+                    seen_test_ids.add(card.test_id)
+                    all_cards.append(card)
+                    new_in_page += 1
+
+            logger.info(f"Page {page}: retrieved {len(page_cards)} tests ({new_in_page} new, {len(all_cards)} total).")
+
+            if len(page_cards) < effective_page_size:
+                break
+
+        return all_cards
 
     async def get_syllabus_pdf(self, test_id: str) -> Optional[bytes]:
         """Fetches the binary syllabus PDF bytes for a given test_id."""
