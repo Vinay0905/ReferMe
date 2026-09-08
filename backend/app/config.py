@@ -23,7 +23,10 @@ class Settings(BaseSettings):
     STORAGE_PROVIDER: Literal["local", "gridfs", "s3"] = "local"
     LOCAL_STORAGE_DIR: str = "./storage_data"
 
-    # Ingestion settings
+    # Ingestion & ALLEN Integration
+    ALLEN_BASE_URL: str = "https://api.allen-live.in"
+    ALLEN_AUTH_TOKEN: str = ""  # Bearer token from user session
+    ALLEN_MOCK_MODE: bool = False  # When True or when token is empty, uses mock data
     DEFAULT_PAGE_SIZE: int = 25
     MAX_CONCURRENT_REQUESTS: int = 3
     REQUEST_TIMEOUT_SECONDS: int = 30
