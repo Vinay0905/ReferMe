@@ -1,1 +1,6 @@
 .vscode
+.env
+*.env
+backend/.env
+storage_data/
+backend/storage_data/

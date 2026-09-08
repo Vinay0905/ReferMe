@@ -23,6 +23,13 @@ def test_pdf_validation():
     valid_header = b"%PDF-1.4" + b"0" * 150
     assert PDFTextExtractor.validate_pdf_bytes(valid_header) is True
 
+    # Valid PDF inside multipart envelope (as observed from ALLEN S3)
+    enveloped = b"------WebKitFormBoundaryXYZ\r\nContent-Type: application/pdf\r\n\r\n%PDF-1.7\r\nstream\r\n%%EOF" + b"0" * 100
+    assert PDFTextExtractor.validate_pdf_bytes(enveloped) is True
+    sanitized = PDFTextExtractor.sanitize_pdf_bytes(enveloped)
+    assert sanitized.startswith(b"%PDF-1.7")
+    assert b"%%EOF" in sanitized
+
 
 def test_pdf_extraction_from_bytes():
     pdf_bytes = create_sample_neet_syllabus_pdf()

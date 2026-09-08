@@ -60,6 +60,49 @@ async def run_ingest(args):
     await close_mongo_connection()
 
 
+async def run_reset_db(args):
+    print("=" * 65)
+    print("Resetting Database (Clearing all documents while preserving schema)")
+    print("=" * 65)
+
+    from app.db.mongo import get_database
+    await connect_to_mongo()
+    db = get_database()
+
+    collections = [
+        "tests",
+        "topics",
+        "test_topics",
+        "artifacts",
+        "syllabus_snapshots",
+        "ingestion_jobs"
+    ]
+
+    for col_name in collections:
+        res = await db[col_name].delete_many({})
+        print(f"  - Cleared {res.deleted_count} documents from collection '{col_name}'")
+
+    print("\nRe-verifying indexes...")
+    await create_indexes()
+
+    if args.clear_storage:
+        import shutil
+        from pathlib import Path
+        from app.config import get_settings
+        storage_dir = Path(get_settings().LOCAL_STORAGE_DIR)
+        if storage_dir.exists():
+            for child in storage_dir.iterdir():
+                if child.is_dir():
+                    shutil.rmtree(child)
+                else:
+                    child.unlink()
+            print(f"  - Cleared downloaded files in {storage_dir}")
+
+    print("\nDatabase successfully reset to clean state!")
+    print("=" * 65)
+    await close_mongo_connection()
+
+
 def main():
     parser = argparse.ArgumentParser(description="ALLEN NEET CLI Management Commands")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -74,10 +117,16 @@ def main():
     mode_group.add_argument("--mock", action="store_true", help="Force offline mock ingestion")
     mode_group.add_argument("--live", action="store_true", help="Force live API ingestion using .env credentials")
 
+    # Reset DB command
+    reset_parser = subparsers.add_parser("reset-db", help="Clear all documents from the database while keeping schema and indexes")
+    reset_parser.add_argument("--clear-storage", action="store_true", help="Also clear locally downloaded PDF files in storage_data")
+
     args = parser.parse_args()
 
     if args.command == "ingest":
         asyncio.run(run_ingest(args))
+    elif args.command == "reset-db":
+        asyncio.run(run_reset_db(args))
 
 
 if __name__ == "__main__":

@@ -65,49 +65,61 @@ class SyllabusParser:
 
         current_subject: Optional[Subject] = None
 
-        for page in extraction.pages:
-            lines = page.text.splitlines()
-
-            for line in lines:
-                clean_line = line.strip()
-                if not clean_line:
+        # Check if 3-column layout was detected (A4 landscape ALLEN syllabus format)
+        if extraction.subject_columns and any(len(txt.strip()) > 3 for txt in extraction.subject_columns.values()):
+            for subj_name, col_text in extraction.subject_columns.items():
+                try:
+                    subject = Subject(subj_name)
+                except ValueError:
                     continue
-
-                # Detect metadata if at top of syllabus
-                if not target_exam and re.search(r"NEET\s*\(?UG\)?", clean_line, re.IGNORECASE):
-                    target_exam = "NEET (UG)"
-
-                if not test_title:
-                    match_title = re.search(r"(MINOR\s+TEST\s*\([^)]+\)|MAJOR\s+TEST\s*\([^)]+\)|OPEN\s+TEST\s*\([^)]+\)|ALL\s+INDIA\s+OPEN\s+TEST\s*\([^)]+\)|TEST\s*-\s*\d+)", clean_line, re.IGNORECASE)
-                    if match_title:
-                        test_title = match_title.group(1).upper()
-
-                if not date_str:
-                    match_date = re.search(r"\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*(?:20\d\d)?)\b", clean_line, re.IGNORECASE)
-                    if match_date:
-                        date_str = match_date.group(1)
-
-                # Skip header/footer boilerplate
-                if any(bp.match(clean_line) for bp in cls.BOILERPLATE_PATTERNS):
-                    continue
-
-                # Check if this line introduces a new Subject header
-                matched_subj = cls._detect_subject_header(clean_line)
-                if matched_subj:
-                    current_subject = matched_subj
-                    # If the header line also contains topics (e.g. "PHYSICS: Electrostatics, Capacitance")
-                    remaining = cls._strip_subject_prefix(clean_line, matched_subj)
-                    if remaining:
-                        raw_sections[current_subject.value].append(remaining)
-                        topics = cls._extract_topics_from_text(remaining, current_subject, page.page_number)
-                        parsed_topics.extend(topics)
-                    continue
-
-                # If inside a known subject section, process the line
-                if current_subject:
-                    raw_sections[current_subject.value].append(clean_line)
-                    topics = cls._extract_topics_from_text(clean_line, current_subject, page.page_number)
+                if col_text.strip():
+                    raw_sections[subject.value].append(col_text)
+                    topics = cls._extract_topics_from_text(col_text, subject, page_number=1)
                     parsed_topics.extend(topics)
+        else:
+            # Traditional line-by-line header detection
+            for page in extraction.pages:
+                lines = page.text.splitlines()
+
+                for line in lines:
+                    clean_line = line.strip()
+                    if not clean_line:
+                        continue
+
+                    # Detect metadata if at top of syllabus
+                    if not target_exam and re.search(r"NEET\s*\(?UG\)?", clean_line, re.IGNORECASE):
+                        target_exam = "NEET (UG)"
+
+                    if not test_title:
+                        match_title = re.search(r"(MINOR\s+TEST\s*\([^)]+\)|MAJOR\s+TEST\s*\([^)]+\)|OPEN\s+TEST\s*\([^)]+\)|ALL\s+INDIA\s+OPEN\s+TEST\s*\([^)]+\)|TEST\s*-\s*\d+)", clean_line, re.IGNORECASE)
+                        if match_title:
+                            test_title = match_title.group(1).upper()
+
+                    if not date_str:
+                        match_date = re.search(r"\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*(?:20\d\d)?)\b", clean_line, re.IGNORECASE)
+                        if match_date:
+                            date_str = match_date.group(1)
+
+                    # Skip header/footer boilerplate
+                    if any(bp.match(clean_line) for bp in cls.BOILERPLATE_PATTERNS):
+                        continue
+
+                    # Check if this line introduces a new Subject header
+                    matched_subj = cls._detect_subject_header(clean_line)
+                    if matched_subj:
+                        current_subject = matched_subj
+                        remaining = cls._strip_subject_prefix(clean_line, matched_subj)
+                        if remaining:
+                            raw_sections[current_subject.value].append(remaining)
+                            topics = cls._extract_topics_from_text(remaining, current_subject, page.page_number)
+                            parsed_topics.extend(topics)
+                        continue
+
+                    # If inside a known subject section, process the line
+                    if current_subject:
+                        raw_sections[current_subject.value].append(clean_line)
+                        topics = cls._extract_topics_from_text(clean_line, current_subject, page.page_number)
+                        parsed_topics.extend(topics)
 
         # Deduplicate identical raw topics within the same subject & page
         unique_topics: List[ParsedTopic] = []
@@ -150,41 +162,49 @@ class SyllabusParser:
         """Parses chapter prefixes and splits delimited topic items."""
         results: List[ParsedTopic] = []
 
-        # Check for chapter/unit prefix, e.g. "Chapter Name: Topic 1, Topic 2" or "1. Chapter Name - Topic 1, Topic 2"
-        section_name = None
-        topic_body = text
+        # Split on bullet points first so multi-topic paragraphs are grouped cleanly
+        chunks = [c.strip() for c in re.split(r"[•·]+", text) if c.strip()]
+        if not chunks:
+            chunks = [text.strip()]
 
-        if ":" in text:
-            parts = text.split(":", 1)
-            candidate_section = parts[0].strip()
-            # If candidate_section is reasonably short (< 60 chars), treat it as section/chapter
-            if len(candidate_section) < 60 and not any(p in candidate_section for p in [",", ";"]):
-                section_name = re.sub(r"^(?:\d+[\.\)]|\-|\*|•)\s*", "", candidate_section).strip()
-                topic_body = parts[1].strip()
-
-        # Split on commas, semicolons, or bullet points, while avoiding splitting decimal numbers like 1.5 or 0.05
-        # Splitting regex: comma or semicolon or bullet symbol
-        raw_items = re.split(r"[;,•·|]+|\s+--\s+", topic_body)
-
-        for item in raw_items:
-            clean_item = item.strip()
-            # Remove leading numbering like "1. ", "a) ", "(i) ", "- "
-            clean_item = re.sub(r"^(?:(?:\d+|[a-zA-Z]|\([a-zA-Z0-9]+\))[\.\)]|\-|\*)\s*", "", clean_item).strip()
-
-            # Ignore empty or excessively short fragments (like single letters or numbers)
-            if len(clean_item) < 3:
+        for chunk in chunks:
+            # Clean null bytes and leading punctuation
+            chunk = chunk.replace("\x00", "").strip()
+            if not chunk or "allen" in chunk.lower():
                 continue
 
-            # Ignore non-topic labels (e.g. "Total Questions", "Section A", "Section B")
-            if re.match(r"^(?:section\s+[ab]|total\s+marks|part\s+\d+|optional)\b", clean_item, re.IGNORECASE):
-                continue
+            # Check for chapter/unit prefix, e.g. "Chapter Name: Topic 1, Topic 2"
+            section_name = None
+            topic_body = chunk
 
-            results.append(ParsedTopic(
-                subject=subject,
-                raw_topic=clean_item,
-                section_name=section_name,
-                page_number=page_number,
-                confidence=1.0
-            ))
+            if ":" in chunk:
+                parts = chunk.split(":", 1)
+                candidate_section = parts[0].strip()
+                if len(candidate_section) < 60 and not any(p in candidate_section for p in [",", ";"]):
+                    section_name = re.sub(r"^(?:\d+[\.\)]|\-|\*|•)\s*", "", candidate_section).strip()
+                    topic_body = parts[1].strip()
+
+            # Split on commas, semicolons, pipe symbols, or double hyphens
+            raw_items = re.split(r"[;,|]+|\s+--\s+", topic_body)
+
+            for item in raw_items:
+                clean_item = item.strip()
+                # Remove leading numbering like "1. ", "a) ", "(i) ", "- "
+                clean_item = re.sub(r"^(?:(?:\d+|[a-zA-Z]|\([a-zA-Z0-9]+\))[\.\)]|\-|\*)\s*", "", clean_item).strip()
+                clean_item = clean_item.replace("\x00", "").strip()
+
+                if len(clean_item) < 3 or "allen" in clean_item.lower():
+                    continue
+
+                if re.match(r"^(?:section\s+[ab]|total\s+marks|part\s+\d+|optional)\b", clean_item, re.IGNORECASE):
+                    continue
+
+                results.append(ParsedTopic(
+                    subject=subject,
+                    raw_topic=clean_item,
+                    section_name=section_name,
+                    page_number=page_number,
+                    confidence=1.0
+                ))
 
         return results

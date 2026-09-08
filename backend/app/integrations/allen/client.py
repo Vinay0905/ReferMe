@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 from pydantic import BaseModel
 from app.config import get_settings
+from app.processing.extractor import PDFTextExtractor
 from app.integrations.allen.mock_data import (
     MOCK_ALLEN_TEST_CARDS,
     get_mock_question_paper_pdf_bytes,
@@ -156,7 +157,7 @@ class AllenClient:
             # Download the binary PDF
             pdf_resp = await client.get(s3_url)
             pdf_resp.raise_for_status()
-            return pdf_resp.content
+            return PDFTextExtractor.sanitize_pdf_bytes(pdf_resp.content)
 
     async def get_question_paper_pdf(self, test_id: str) -> Optional[bytes]:
         """Fetches the question paper / solution PDF from result-insights endpoint."""
@@ -166,12 +167,16 @@ class AllenClient:
 
         url = f"{self.base_url}/api/v1/tests/{test_id}/result-insights?attempt=0"
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.get(url, headers=self._get_headers())
-            if resp.status_code == 404:
-                logger.info(f"No result insights/question paper found for test {test_id}.")
+            try:
+                resp = await client.get(url, headers=self._get_headers())
+                if resp.status_code in [400, 403, 404, 500]:
+                    logger.info(f"Question paper/result-insights not available yet for test {test_id} (status: {resp.status_code}).")
+                    return None
+                resp.raise_for_status()
+                res_data = resp.json()
+            except Exception as e:
+                logger.info(f"Could not retrieve question paper for test {test_id}: {e}")
                 return None
-            resp.raise_for_status()
-            res_data = resp.json()
 
             # Locate English solution PDF in missed_test_info ctas
             missed_info = res_data.get("data", {}).get("missed_test_info", {})
@@ -193,4 +198,4 @@ class AllenClient:
 
             pdf_resp = await client.get(s3_url)
             pdf_resp.raise_for_status()
-            return pdf_resp.content
+            return PDFTextExtractor.sanitize_pdf_bytes(pdf_resp.content)
