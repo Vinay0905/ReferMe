@@ -1,0 +1,190 @@
+import re
+from typing import Dict, List, Optional
+from pydantic import BaseModel, Field
+from app.models.common import Subject
+from app.processing.extractor import ExtractionResult
+
+
+class ParsedTopic(BaseModel):
+    subject: Subject
+    raw_topic: str
+    section_name: Optional[str] = None  # e.g., Chapter or Unit name if available
+    page_number: int = 1
+    confidence: float = 1.0
+
+
+class ParsedSyllabus(BaseModel):
+    parser_version: str = "v1"
+    test_title: Optional[str] = None
+    target_exam: Optional[str] = None
+    date_str: Optional[str] = None
+    topics: List[ParsedTopic] = Field(default_factory=list)
+    raw_sections: Dict[str, List[str]] = Field(default_factory=dict)
+    is_valid: bool = False
+    warning: Optional[str] = None
+
+
+class SyllabusParser:
+    """Deterministic structural parser for NEET syllabi."""
+
+    VERSION = "v1"
+
+    # Regex patterns for subject headers
+    SUBJECT_PATTERNS = {
+        Subject.PHYSICS: re.compile(r"^\s*(?:SUBJECT\s*[:\-])?\s*PHYSICS\b", re.IGNORECASE),
+        Subject.CHEMISTRY: re.compile(r"^\s*(?:SUBJECT\s*[:\-])?\s*CHEMISTRY\b", re.IGNORECASE),
+        Subject.BIOLOGY: re.compile(r"^\s*(?:SUBJECT\s*[:\-])?\s*(?:BIOLOGY|BOTANY|ZOOLOGY)\b", re.IGNORECASE),
+    }
+
+    # Common boilerplate lines to ignore
+    BOILERPLATE_PATTERNS = [
+        re.compile(r"^page\s+\d+\s+of\s+\d+", re.IGNORECASE),
+        re.compile(r"^allen\s+career\s+institute", re.IGNORECASE),
+        re.compile(r"^corporate\s+office\b", re.IGNORECASE),
+        re.compile(r"^test\s+syllabus\b", re.IGNORECASE),
+        re.compile(r"^schedule\s+&\s+syllabus\b", re.IGNORECASE),
+        re.compile(r"^\*+\s*confidential\s*\*+", re.IGNORECASE),
+        re.compile(r"^time\s*:\s*\d+", re.IGNORECASE),
+        re.compile(r"^max(?:imum)?\s+marks\s*:\s*\d+", re.IGNORECASE),
+    ]
+
+    @classmethod
+    def parse(cls, extraction: ExtractionResult) -> ParsedSyllabus:
+        if not extraction.has_extractable_text:
+            return ParsedSyllabus(
+                parser_version=cls.VERSION,
+                is_valid=False,
+                warning="Extraction result contains no extractable text."
+            )
+
+        test_title = None
+        target_exam = None
+        date_str = None
+        parsed_topics: List[ParsedTopic] = []
+        raw_sections: Dict[str, List[str]] = {s.value: [] for s in Subject}
+
+        current_subject: Optional[Subject] = None
+
+        for page in extraction.pages:
+            lines = page.text.splitlines()
+
+            for line in lines:
+                clean_line = line.strip()
+                if not clean_line:
+                    continue
+
+                # Detect metadata if at top of syllabus
+                if not target_exam and re.search(r"NEET\s*\(?UG\)?", clean_line, re.IGNORECASE):
+                    target_exam = "NEET (UG)"
+
+                if not test_title:
+                    match_title = re.search(r"(MINOR\s+TEST\s*\([^)]+\)|MAJOR\s+TEST\s*\([^)]+\)|OPEN\s+TEST\s*\([^)]+\)|ALL\s+INDIA\s+OPEN\s+TEST\s*\([^)]+\)|TEST\s*-\s*\d+)", clean_line, re.IGNORECASE)
+                    if match_title:
+                        test_title = match_title.group(1).upper()
+
+                if not date_str:
+                    match_date = re.search(r"\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*(?:20\d\d)?)\b", clean_line, re.IGNORECASE)
+                    if match_date:
+                        date_str = match_date.group(1)
+
+                # Skip header/footer boilerplate
+                if any(bp.match(clean_line) for bp in cls.BOILERPLATE_PATTERNS):
+                    continue
+
+                # Check if this line introduces a new Subject header
+                matched_subj = cls._detect_subject_header(clean_line)
+                if matched_subj:
+                    current_subject = matched_subj
+                    # If the header line also contains topics (e.g. "PHYSICS: Electrostatics, Capacitance")
+                    remaining = cls._strip_subject_prefix(clean_line, matched_subj)
+                    if remaining:
+                        raw_sections[current_subject.value].append(remaining)
+                        topics = cls._extract_topics_from_text(remaining, current_subject, page.page_number)
+                        parsed_topics.extend(topics)
+                    continue
+
+                # If inside a known subject section, process the line
+                if current_subject:
+                    raw_sections[current_subject.value].append(clean_line)
+                    topics = cls._extract_topics_from_text(clean_line, current_subject, page.page_number)
+                    parsed_topics.extend(topics)
+
+        # Deduplicate identical raw topics within the same subject & page
+        unique_topics: List[ParsedTopic] = []
+        seen_keys = set()
+        for t in parsed_topics:
+            key = (t.subject.value, t.raw_topic.strip().lower())
+            if key not in seen_keys:
+                seen_keys.add(key)
+                unique_topics.append(t)
+
+        is_valid = len(unique_topics) > 0
+
+        return ParsedSyllabus(
+            parser_version=cls.VERSION,
+            test_title=test_title,
+            target_exam=target_exam,
+            date_str=date_str,
+            topics=unique_topics,
+            raw_sections=raw_sections,
+            is_valid=is_valid,
+            warning=None if is_valid else "No valid subject sections or topics could be parsed."
+        )
+
+    @classmethod
+    def _detect_subject_header(cls, line: str) -> Optional[Subject]:
+        for subject, pattern in cls.SUBJECT_PATTERNS.items():
+            if pattern.search(line):
+                return subject
+        return None
+
+    @classmethod
+    def _strip_subject_prefix(cls, line: str, subject: Subject) -> str:
+        pattern = cls.SUBJECT_PATTERNS[subject]
+        stripped = pattern.sub("", line).strip()
+        # Strip leading punctuation like colon or hyphen
+        return re.sub(r"^[:\-\s]+", "", stripped).strip()
+
+    @classmethod
+    def _extract_topics_from_text(cls, text: str, subject: Subject, page_number: int) -> List[ParsedTopic]:
+        """Parses chapter prefixes and splits delimited topic items."""
+        results: List[ParsedTopic] = []
+
+        # Check for chapter/unit prefix, e.g. "Chapter Name: Topic 1, Topic 2" or "1. Chapter Name - Topic 1, Topic 2"
+        section_name = None
+        topic_body = text
+
+        if ":" in text:
+            parts = text.split(":", 1)
+            candidate_section = parts[0].strip()
+            # If candidate_section is reasonably short (< 60 chars), treat it as section/chapter
+            if len(candidate_section) < 60 and not any(p in candidate_section for p in [",", ";"]):
+                section_name = re.sub(r"^(?:\d+[\.\)]|\-|\*|•)\s*", "", candidate_section).strip()
+                topic_body = parts[1].strip()
+
+        # Split on commas, semicolons, or bullet points, while avoiding splitting decimal numbers like 1.5 or 0.05
+        # Splitting regex: comma or semicolon or bullet symbol
+        raw_items = re.split(r"[;,•·|]+|\s+--\s+", topic_body)
+
+        for item in raw_items:
+            clean_item = item.strip()
+            # Remove leading numbering like "1. ", "a) ", "(i) ", "- "
+            clean_item = re.sub(r"^(?:(?:\d+|[a-zA-Z]|\([a-zA-Z0-9]+\))[\.\)]|\-|\*)\s*", "", clean_item).strip()
+
+            # Ignore empty or excessively short fragments (like single letters or numbers)
+            if len(clean_item) < 3:
+                continue
+
+            # Ignore non-topic labels (e.g. "Total Questions", "Section A", "Section B")
+            if re.match(r"^(?:section\s+[ab]|total\s+marks|part\s+\d+|optional)\b", clean_item, re.IGNORECASE):
+                continue
+
+            results.append(ParsedTopic(
+                subject=subject,
+                raw_topic=clean_item,
+                section_name=section_name,
+                page_number=page_number,
+                confidence=1.0
+            ))
+
+        return results
