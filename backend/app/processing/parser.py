@@ -158,9 +158,38 @@ class SyllabusParser:
         return re.sub(r"^[:\-\s]+", "", stripped).strip()
 
     @classmethod
+    def _clean_raw_text(cls, text: str) -> str:
+        """Repairs dropped font ligatures, typographic apostrophes, and protects compound chapters."""
+        if not text:
+            return ""
+        # 1. Ligatures and OCR artifacts
+        text = re.sub(r"\bclassi\s*cation\b", "Classification", text, flags=re.IGNORECASE)
+        text = re.sub(r"\bclassication\b", "Classification", text, flags=re.IGNORECASE)
+        text = re.sub(r"(?<=\s)owering\b", "flowering", text, flags=re.IGNORECASE)
+        text = re.sub(r"\bowering\b", "flowering", text, flags=re.IGNORECASE)
+        text = re.sub(r"\bde\s*ection\b", "deflection", text, flags=re.IGNORECASE)
+        text = re.sub(r"\bdeection\b", "deflection", text, flags=re.IGNORECASE)
+        text = re.sub(r"\boxalicacid\b", "Oxalic Acid", text, flags=re.IGNORECASE)
+
+        # 2. Quotes & Punctuation
+        text = text.replace("`", "'").replace("’", "'").replace("‘", "'")
+
+        # 3. Compound chapter protection before comma splitting
+        # In NEET syllabus, these chapters contain commas. We protect them so comma-splitting does not shatter them.
+        text = re.sub(r"\bUnits?,\s*Dimensions?\s*and\s*Measurements?\b", "Units and Measurements", text, flags=re.IGNORECASE)
+        text = re.sub(r"\bUnit,\s*Dimensions and Measurement\b", "Units and Measurements", text, flags=re.IGNORECASE)
+        text = re.sub(r"\bWork,\s*Energy\s*(&|and)\s*Power\b", "Work Energy and Power", text, flags=re.IGNORECASE)
+        text = re.sub(r"\bAcids,\s*bases\s*and\s*the\s*use\s*of\s*indicators\b", "Acids Bases and the Use of Indicators", text, flags=re.IGNORECASE)
+
+        return text
+
+    @classmethod
     def _extract_topics_from_text(cls, text: str, subject: Subject, page_number: int) -> List[ParsedTopic]:
         """Parses chapter prefixes and splits delimited topic items."""
         results: List[ParsedTopic] = []
+
+        # Pre-clean text for ligatures and protected compound chapters
+        text = cls._clean_raw_text(text)
 
         # Split on bullet points first so multi-topic paragraphs are grouped cleanly
         chunks = [c.strip() for c in re.split(r"[•·]+", text) if c.strip()]
@@ -199,6 +228,24 @@ class SyllabusParser:
                 clean_item = re.sub(r"^(?:PHYSICS|CHEMISTRY|BIOLOGY|BOTANY|ZOOLOGY)\s*[:\-]\s*", "", clean_item, flags=re.IGNORECASE).strip()
                 clean_item = clean_item.replace("\x00", "").strip()
 
+                # Clean trailing periods or commas
+                clean_item = clean_item.rstrip(".,;").strip()
+
+                item_sec = section_name
+                # Detect sub-section headers embedded in item
+                if re.search(r"\bexperimental\s+skills\b\s*:", clean_item, re.IGNORECASE):
+                    item_sec = "Experimental Skills"
+                    clean_item = re.sub(r"^experimental\s+skills\s*:\s*", "", clean_item, flags=re.IGNORECASE).strip()
+                elif re.search(r"\bprinciples\s+related\s+to\s+practical\s+chemistry\b\s*:", clean_item, re.IGNORECASE):
+                    item_sec = "Practical Chemistry"
+                    clean_item = re.sub(r"^principles\s+related\s+to\s+practical\s+chemistry\s*:\s*(?:the\s+chemistry\s+involved\s+in\s+the\s+titrimetric\s+exercises\s*[-–]\s*)?", "", clean_item, flags=re.IGNORECASE).strip()
+                elif clean_item.lower().startswith("chemical principles involved in the following experiments:"):
+                    item_sec = "Practical Chemistry"
+                    clean_item = re.sub(r"^chemical\s+principles\s+involved\s+in\s+the\s+following\s+experiments:\s*\d*[\.\)]?\s*", "", clean_item, flags=re.IGNORECASE).strip()
+
+                # Remove numeric prefixes after extraction
+                clean_item = re.sub(r"^\d+[\.\)]\s*", "", clean_item).strip()
+
                 if len(clean_item) < 3 or "allen" in clean_item.lower():
                     continue
 
@@ -208,7 +255,7 @@ class SyllabusParser:
                 results.append(ParsedTopic(
                     subject=subject,
                     raw_topic=clean_item,
-                    section_name=section_name,
+                    section_name=item_sec,
                     page_number=page_number,
                     confidence=1.0
                 ))

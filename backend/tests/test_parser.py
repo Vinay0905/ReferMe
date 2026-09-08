@@ -147,3 +147,46 @@ def test_syllabus_parser_empty_or_malformed():
     parsed_unrelated = SyllabusParser.parse(unrelated_extraction)
     assert parsed_unrelated.is_valid is False
     assert len(parsed_unrelated.topics) == 0
+
+
+def test_ligatures_and_compound_chapter_cleaning():
+    normalizer = TopicNormalizer()
+
+    # 1. Test Units, Dimensions and Measurements (resolving "Unit" bug)
+    text = "• Basic Mathematics Used In Physics & Vectors, Unit, Dimensions and Measurement, Electrostatics"
+    cleaned = SyllabusParser._clean_raw_text(text)
+    assert "Units and Measurements" in cleaned
+    assert "Unit," not in cleaned
+
+    topics = SyllabusParser._extract_topics_from_text(text, Subject.PHYSICS, page_number=1)
+    topic_names = [t.raw_topic for t in topics]
+    assert "Units and Measurements" in topic_names
+    assert "Unit" not in topic_names
+    assert "Dimensions and Measurement" not in topic_names
+
+    # Normalize
+    norm = normalizer.normalize(topics[1])
+    assert norm.canonical_key == "physics:units-dimensions-and-measurements"
+    assert norm.name == "Units, Dimensions and Measurements"
+
+    # 2. Test Work, Energy and Power compound protection
+    text_work = "• Work, Energy & Power, Circular Motion"
+    topics_work = SyllabusParser._extract_topics_from_text(text_work, Subject.PHYSICS, page_number=1)
+    assert any("Work Energy and Power" in t.raw_topic for t in topics_work)
+    assert not any(t.raw_topic == "Work" for t in topics_work)
+
+    # 3. Test Ligature restoration
+    text_bio = "• The living world, Biological Classi cation, Sexual reproduction in  owering plants"
+    topics_bio = SyllabusParser._extract_topics_from_text(text_bio, Subject.BIOLOGY, page_number=1)
+    norm_bio = [normalizer.normalize(t) for t in topics_bio]
+    assert any(n.name == "Biological Classification" for n in norm_bio)
+    assert any(n.name == "Sexual Reproduction in Flowering Plants" for n in norm_bio)
+
+    # 4. Test Backtick & Ohm's law
+    text_ohm = "The resistance of a given wire using Ohm`s law."
+    topics_ohm = SyllabusParser._extract_topics_from_text(text_ohm, Subject.PHYSICS, page_number=1)
+    norm_ohm = normalizer.normalize(topics_ohm[0])
+    assert "`" not in norm_ohm.name
+    assert norm_ohm.canonical_key == "physics:exp-ohms-law"
+    assert norm_ohm.name == "Experimental Skills: Ohm's Law"
+
