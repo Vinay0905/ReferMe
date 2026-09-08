@@ -59,6 +59,13 @@ export const TopicDetailStudio: React.FC<TopicDetailStudioProps> = ({
             <span className="text-xs font-mono text-[#EEEEEE]/50">
               {topic.canonical_key}
             </span>
+            {topic.target_classes && topic.target_classes.length > 0 && (
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#E4DA72]/15 border border-[#E4DA72]/30 text-[#E4DA72]">
+                {topic.target_classes.includes("11th") && topic.target_classes.includes("12th")
+                  ? "Class 11th & 12th"
+                  : `Class ${topic.target_classes.join(", ")}`}
+              </span>
+            )}
           </div>
           <h2 className="text-lg font-bold text-[#EEEEEE] truncate mt-1">
             {topic.name}
@@ -108,7 +115,10 @@ export const TopicDetailStudio: React.FC<TopicDetailStudioProps> = ({
                   <h4 className="text-sm font-bold text-[#EEEEEE] group-hover:text-white">
                     {t.name}
                   </h4>
-                  <div className="flex items-center gap-3 text-xs text-[#EEEEEE]/60 mt-1">
+                  <div className="flex items-center gap-2 text-xs text-[#EEEEEE]/60 mt-1 flex-wrap">
+                    <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-[#9564DD]/20 border border-[#9564DD]/40 text-[#EEEEEE]">
+                      {t.target_class || "12th"} • {t.target_class === "11th" ? "Nurture" : "Leader"}
+                    </span>
                     {t.date && (
                       <span className="flex items-center gap-1 font-mono text-[11px]">
                         <Calendar className="w-3 h-3 text-[#9564DD]" />

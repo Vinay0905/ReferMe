@@ -36,15 +36,28 @@ export const TopicCard: React.FC<TopicCardProps> = ({
       className="p-5"
     >
       <div className="flex flex-col gap-3">
-        {/* Top Header: Subject Badge & Test Count */}
-        <div className="flex items-center justify-between">
-          <span
-            className={`text-[11px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-md border ${getSubjectBadgeStyle(
-              topic.subject
-            )}`}
-          >
-            {topic.subject}
-          </span>
+        {/* Top Header: Subject Badge, Class Badge & Test Count */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span
+              className={`text-[11px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-md border ${getSubjectBadgeStyle(
+                topic.subject
+              )}`}
+            >
+              {topic.subject}
+            </span>
+            {topic.target_classes && topic.target_classes.length > 0 && (
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                topic.target_classes.includes("11th") && topic.target_classes.includes("12th")
+                  ? "bg-[#E4DA72]/15 text-[#E4DA72] border-[#E4DA72]/30"
+                  : "bg-[#3E0F8D]/50 text-[#EEEEEE]/80 border-[#9564DD]/30"
+              }`}>
+                {topic.target_classes.includes("11th") && topic.target_classes.includes("12th")
+                  ? "11th & 12th"
+                  : topic.target_classes.join(", ")}
+              </span>
+            )}
+          </div>
 
           <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#E4DA72]/15 border border-[#E4DA72]/30 text-[#E4DA72] text-xs font-mono font-medium">
             <Layers className="w-3 h-3" />

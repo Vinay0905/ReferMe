@@ -27,7 +27,10 @@ export const TestCard: React.FC<TestCardProps> = ({
       <div className="flex flex-col gap-4">
         {/* Header: Mode, Status, Category */}
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#9564DD]/20 border border-[#9564DD]/40 text-[#EEEEEE] font-medium">
+              {test.target_class || "12th"} • {test.target_class === "11th" ? "Nurture" : "Leader"}
+            </span>
             {test.mode && (
               <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#3E0F8D] border border-[#9564DD]/50 text-[#EEEEEE]">
                 {test.mode}

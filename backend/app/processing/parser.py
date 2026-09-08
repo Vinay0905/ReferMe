@@ -264,6 +264,9 @@ class SyllabusParser:
                 if len(clean_item) < 3 or "allen" in clean_item.lower():
                     continue
 
+                if clean_item.lower() in ["physics", "chemistry", "biology", "botany", "zoology"]:
+                    continue
+
                 if re.match(r"^(?:section\s+[ab]|total\s+marks|part\s+\d+|optional)\b", clean_item, re.IGNORECASE):
                     continue
 

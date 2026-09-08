@@ -107,6 +107,7 @@ class PDFTextExtractor:
                                 if (header_top == 0 or header_top - 5 <= w["top"])
                                 and w["bottom"] <= footer_top + 2
                                 and "allen" not in w["text"].lower()
+                                and w["text"].upper() not in ["PHYSICS", "CHEMISTRY", "BIOLOGY"]
                             ]
                             words_sorted = sorted(words_filtered, key=lambda w: (w["top"], w["x0"]))
                             # Column boundaries: Col 1 (<300), Col 2 (300-550), Col 3 (>550)

@@ -55,16 +55,19 @@ export default function StudioPage() {
     return topics.filter((t) => {
       const matchesSubject =
         selectedSubject === "all" || t.subject.toLowerCase() === selectedSubject.toLowerCase();
+      const matchesClass =
+        selectedClass === "all" ||
+        (t.target_classes && t.target_classes.map((c) => c.toLowerCase()).includes(selectedClass.toLowerCase()));
       const q = searchQuery.toLowerCase().trim();
       const matchesQuery =
         !q ||
         t.name.toLowerCase().includes(q) ||
         t.canonical_key.toLowerCase().includes(q) ||
-        t.aliases.some((a) => a.toLowerCase().includes(q));
+        t.aliases?.some((a) => a.toLowerCase().includes(q));
 
-      return matchesSubject && matchesQuery;
+      return matchesSubject && matchesClass && matchesQuery;
     });
-  }, [topics, selectedSubject, searchQuery]);
+  }, [topics, selectedSubject, selectedClass, searchQuery]);
 
   // Filtered Tests
   const filteredTests = useMemo(() => {
@@ -119,19 +122,36 @@ export default function StudioPage() {
     }
   };
 
-  // Subject Counts for HUD
-  const subjectMetrics = useMemo(() => {
+  // Topics belonging to the active class selection (independent of search query / subject filter)
+  const classTopics = useMemo(() => {
+    return topics.filter((t) => {
+      if (selectedClass === "all") return true;
+      return t.target_classes && t.target_classes.map((c) => c.toLowerCase()).includes(selectedClass.toLowerCase());
+    });
+  }, [topics, selectedClass]);
+
+  // Tests belonging to the active class selection (independent of search query)
+  const classTests = useMemo(() => {
+    return tests.filter((t) => {
+      if (selectedClass === "all") return true;
+      const testClass = t.target_class?.toLowerCase() || "12th";
+      return testClass === selectedClass.toLowerCase();
+    });
+  }, [tests, selectedClass]);
+
+  // Subject Counts for HUD (scoped to currently selected class)
+  const classSubjectMetrics = useMemo(() => {
     let phys = 0;
     let chem = 0;
     let bio = 0;
-    topics.forEach((t) => {
+    classTopics.forEach((t) => {
       const s = t.subject.toLowerCase();
       if (s === "physics") phys++;
       else if (s === "chemistry") chem++;
       else if (s === "biology") bio++;
     });
     return { physics: phys, chemistry: chem, biology: bio };
-  }, [topics]);
+  }, [classTopics]);
 
   return (
     <main className="min-h-screen p-4 md:p-8 max-w-[1700px] mx-auto">
@@ -151,8 +171,8 @@ export default function StudioPage() {
             setSelectedSubject={setSelectedSubject}
             selectedClass={selectedClass}
             setSelectedClass={setSelectedClass}
-            topicsCount={topics.length}
-            testsCount={filteredTests.length}
+            topicsCount={classTopics.length}
+            testsCount={classTests.length}
           />
 
           {/* Connection Error Banner */}
@@ -282,11 +302,11 @@ export default function StudioPage() {
             />
           ) : (
             <CleanHud
-              totalTests={tests.length}
-              totalTopics={topics.length}
-              physicsCount={subjectMetrics.physics}
-              chemistryCount={subjectMetrics.chemistry}
-              biologyCount={subjectMetrics.biology}
+              totalTests={classTests.length}
+              totalTopics={classTopics.length}
+              physicsCount={classSubjectMetrics.physics}
+              chemistryCount={classSubjectMetrics.chemistry}
+              biologyCount={classSubjectMetrics.biology}
             />
           )}
         </section>
