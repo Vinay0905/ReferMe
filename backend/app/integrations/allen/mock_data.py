@@ -1,5 +1,6 @@
 from typing import Any, Dict, List
 from tests.fixtures.sample_syllabus import create_sample_neet_syllabus_pdf
+from tests.fixtures.sample_question_paper import create_sample_neet_question_paper_pdf
 
 MOCK_ALLEN_TEST_CARDS: List[Dict[str, Any]] = [
     {
@@ -78,4 +79,4 @@ def get_mock_syllabus_pdf_bytes(test_id: str) -> bytes:
 
 def get_mock_question_paper_pdf_bytes(test_id: str) -> bytes:
     """Returns realistic mock question paper PDF bytes for testing."""
-    return create_sample_neet_syllabus_pdf()
+    return create_sample_neet_question_paper_pdf()

@@ -181,7 +181,11 @@ class SyllabusParser:
                 parts = chunk.split(":", 1)
                 candidate_section = parts[0].strip()
                 if len(candidate_section) < 60 and not any(p in candidate_section for p in [",", ";"]):
-                    section_name = re.sub(r"^(?:\d+[\.\)]|\-|\*|•)\s*", "", candidate_section).strip()
+                    candidate_clean = re.sub(r"^(?:\d+[\.\)]|\-|\*|•)\s*", "", candidate_section).strip()
+                    # Strip any subject labels if present in section header
+                    candidate_clean = re.sub(r"^(?:PHYSICS|CHEMISTRY|BIOLOGY|BOTANY|ZOOLOGY)\s*[:\-]\s*", "", candidate_clean, flags=re.IGNORECASE).strip()
+                    if candidate_clean:
+                        section_name = candidate_clean
                     topic_body = parts[1].strip()
 
             # Split on commas, semicolons, pipe symbols, or double hyphens
@@ -191,6 +195,8 @@ class SyllabusParser:
                 clean_item = item.strip()
                 # Remove leading numbering like "1. ", "a) ", "(i) ", "- "
                 clean_item = re.sub(r"^(?:(?:\d+|[a-zA-Z]|\([a-zA-Z0-9]+\))[\.\)]|\-|\*)\s*", "", clean_item).strip()
+                # Remove any accidental leading subject labels (e.g. "CHEMISTRY: ", "BIOLOGY: ")
+                clean_item = re.sub(r"^(?:PHYSICS|CHEMISTRY|BIOLOGY|BOTANY|ZOOLOGY)\s*[:\-]\s*", "", clean_item, flags=re.IGNORECASE).strip()
                 clean_item = clean_item.replace("\x00", "").strip()
 
                 if len(clean_item) < 3 or "allen" in clean_item.lower():

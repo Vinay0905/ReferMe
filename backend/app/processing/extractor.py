@@ -90,23 +90,26 @@ class PDFTextExtractor:
                     if clean_text:
                         full_text_parts.append(clean_text)
 
-                # Column layout detection for multi-column syllabus formats (e.g. A4 landscape 3-column)
+                # Column layout detection for multi-column syllabus formats (A4 landscape 3-column ALLEN syllabi)
                 if pdf.pages:
                     first_page = pdf.pages[0]
-                    words = first_page.extract_words()
-                    if words:
-                        words_sorted = sorted(words, key=lambda w: (w["top"], w["x0"]))
-                        # Column boundaries: Col 1 (<300), Col 2 (300-550), Col 3 (>550)
-                        col_physics = [w["text"] for w in words_sorted if w["x0"] < 300 and "allen" not in w["text"].lower()]
-                        col_chemistry = [w["text"] for w in words_sorted if 300 <= w["x0"] < 550 and "allen" not in w["text"].lower()]
-                        col_biology = [w["text"] for w in words_sorted if w["x0"] >= 550 and "allen" not in w["text"].lower()]
+                    # Must be landscape orientation (width > 700 pt)
+                    if getattr(first_page, "width", 0) > 700:
+                        words = first_page.extract_words()
+                        if words:
+                            words_sorted = sorted(words, key=lambda w: (w["top"], w["x0"]))
+                            # Column boundaries: Col 1 (<300), Col 2 (300-550), Col 3 (>550)
+                            col_physics = [w["text"] for w in words_sorted if w["x0"] < 300 and "allen" not in w["text"].lower()]
+                            col_chemistry = [w["text"] for w in words_sorted if 300 <= w["x0"] < 550 and "allen" not in w["text"].lower()]
+                            col_biology = [w["text"] for w in words_sorted if w["x0"] >= 550 and "allen" not in w["text"].lower()]
 
-                        if len(col_physics) > 1 or len(col_chemistry) > 1 or len(col_biology) > 1:
-                            subject_columns = {
-                                "Physics": " ".join(col_physics),
-                                "Chemistry": " ".join(col_chemistry),
-                                "Biology": " ".join(col_biology),
-                            }
+                            # Require significant content across all three columns to qualify as landscape 3-column
+                            if len(col_physics) > 3 and len(col_chemistry) > 3 and len(col_biology) > 3:
+                                subject_columns = {
+                                    "Physics": " ".join(col_physics),
+                                    "Chemistry": " ".join(col_chemistry),
+                                    "Biology": " ".join(col_biology),
+                                }
 
             total_chars = sum(p.char_count for p in pages)
             if total_chars > 20:
