@@ -26,3 +26,27 @@ class TestTopicModel(BaseMongoModel):
     normalization_version: str = "v1"
     confidence: float = 1.0
     created_at: datetime = Field(default_factory=utc_now)
+
+
+class QuestionClassificationMethod(str, Enum):
+    STRUCTURAL = "structural"
+    FINGERPRINT = "fingerprint"
+    DETERMINISTIC = "deterministic"
+    TFIDF = "tfidf"
+    AI_SUGGESTED = "ai_suggested"
+    MANUAL = "manual"
+
+
+class QuestionTopicModel(BaseMongoModel):
+    __test__ = False
+    question_id: str  # References questions._id
+    test_id: str  # References tests._id
+    external_test_id: Optional[str] = None
+    topic_id: str  # References topics._id
+    canonical_key: str
+    subject: Subject
+    classification_method: QuestionClassificationMethod = QuestionClassificationMethod.DETERMINISTIC
+    confidence: float = 1.0
+    classifier_version: str = "v1"
+    created_at: datetime = Field(default_factory=utc_now)
+

@@ -52,4 +52,27 @@ async def create_indexes():
         IndexModel([("content_hash", ASCENDING)], name="idx_snapshots_hash")
     ])
 
+    # questions: unique (test_id, question_number, subject), fingerprint lookup, test_id lookup
+    await db["questions"].create_indexes([
+        IndexModel(
+            [("test_id", ASCENDING), ("question_number", ASCENDING), ("subject", ASCENDING)],
+            unique=True,
+            name="idx_questions_test_qnum_subject"
+        ),
+        IndexModel([("fingerprint", ASCENDING)], name="idx_questions_fingerprint"),
+        IndexModel([("test_id", ASCENDING)], name="idx_questions_test_id"),
+        IndexModel([("external_test_id", ASCENDING)], name="idx_questions_external_test_id")
+    ])
+
+    # question_topics: primary topic_id lookup, unique (question_id, topic_id), test_id lookup
+    await db["question_topics"].create_indexes([
+        IndexModel([("topic_id", ASCENDING)], name="idx_question_topics_by_topic"),
+        IndexModel([("question_id", ASCENDING), ("topic_id", ASCENDING)], unique=True, name="idx_question_topics_unique"),
+        IndexModel([("test_id", ASCENDING), ("topic_id", ASCENDING)], name="idx_question_topics_test_topic"),
+        IndexModel([("test_id", ASCENDING)], name="idx_question_topics_by_test"),
+        IndexModel([("canonical_key", ASCENDING)], name="idx_question_topics_canonical_key"),
+        IndexModel([("subject", ASCENDING)], name="idx_question_topics_subject")
+    ])
+
     logger.info("MongoDB indexes successfully created.")
+

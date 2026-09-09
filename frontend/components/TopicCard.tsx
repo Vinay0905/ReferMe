@@ -77,13 +77,14 @@ export const TopicCard: React.FC<TopicCardProps> = ({
 
         {/* Card Footer: Action Hint */}
         <div className="pt-2 border-t border-[#9564DD]/15 flex items-center justify-between text-xs">
-          <span className="text-[#EEEEEE]/40 text-[11px]">
-            Click to view test occurrences
+          <span className="text-[#EEEEEE]/50 text-[11px] flex items-center gap-1">
+            Explore Questions & Tests
           </span>
           <div className="flex items-center text-[#9564DD] group-hover:text-[#E4DA72] transition-colors">
             <ChevronRight className="w-4 h-4" />
           </div>
         </div>
+
       </div>
     </TiltCard>
   );

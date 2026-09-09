@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.artifacts import router as artifacts_router
 from app.api.v1.health import router as health_router
 from app.api.v1.ingest import router as ingest_router
+from app.api.v1.questions import router as questions_router
 from app.api.v1.tests import router as tests_router
 from app.api.v1.topics import router as topics_router
 from app.config import get_settings
@@ -48,5 +49,6 @@ app.include_router(health_router, prefix=settings.API_V1_STR, tags=["Health"])
 app.include_router(health_router, tags=["Health Root"])  # Allows top-level /health & /ready
 app.include_router(tests_router, prefix=settings.API_V1_STR)
 app.include_router(topics_router, prefix=settings.API_V1_STR)
+app.include_router(questions_router, prefix=settings.API_V1_STR)
 app.include_router(artifacts_router, prefix=settings.API_V1_STR)
 app.include_router(ingest_router, prefix=settings.API_V1_STR)

@@ -40,7 +40,7 @@ export const CleanHud: React.FC<CleanHudProps> = ({
             NEET Syllabus Studio
           </h2>
           <p className="text-xs text-[#EEEEEE]/60 mt-1.5 leading-relaxed">
-            Select any test card to inspect its 3-column syllabus or preview its PDF directly. Select a topic to explore every test that covers it.
+            Select any test card to inspect its syllabus or preview its PDF. Select a topic to explore scheduled tests and practice real exam questions.
           </p>
         </div>
 
@@ -76,12 +76,13 @@ export const CleanHud: React.FC<CleanHudProps> = ({
           <div className="p-4 rounded-xl bg-[#3E0F8D]/30 border border-[#9564DD]/40">
             <div className="flex items-center justify-between text-[#E4DA72]">
               <Sparkles className="w-4 h-4" />
-              <span className="text-[10px] uppercase tracking-wider font-mono text-[#EEEEEE]/40">Lookup</span>
+              <span className="text-[10px] uppercase tracking-wider font-mono text-[#EEEEEE]/40">Questions</span>
             </div>
-            <div className="text-2xl font-bold font-mono text-[#E4DA72] mt-2">100%</div>
-            <div className="text-xs text-[#EEEEEE]/60">Offline Ready</div>
+            <div className="text-2xl font-bold font-mono text-[#E4DA72] mt-2">3,600</div>
+            <div className="text-xs text-[#EEEEEE]/60">Indexed &amp; Mapped</div>
           </div>
         </div>
+
 
         {/* Subject Breakdown Distribution Meters */}
         <div className="mt-8 space-y-4">

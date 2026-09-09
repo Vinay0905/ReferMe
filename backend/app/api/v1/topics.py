@@ -3,15 +3,19 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query, status
 from app.models.common import Subject
 from app.models.topic import TopicModel
+from app.repositories.question_repo import QuestionRepository
+from app.repositories.question_topic_repo import QuestionTopicRepository
 from app.repositories.test_repo import TestRepository
 from app.repositories.test_topic_repo import TestTopicRepository
 from app.repositories.topic_repo import TopicRepository
 from app.schemas.common import PaginatedResponse
+from app.schemas.question import QuestionItemResponse
 from app.schemas.topic import (
     TopicResponse,
     TopicTestItem,
     TopicWithTestsResponse,
 )
+
 
 router = APIRouter(prefix="/topics", tags=["Topics"])
 
@@ -140,3 +144,104 @@ async def get_topic_tests(
         total_tests=total_matches,
         tests=test_items,
     )
+
+
+@router.get("/{topic_identifier}/questions", response_model=PaginatedResponse[QuestionItemResponse])
+async def get_topic_questions(
+    topic_identifier: str,
+    test_id: Optional[str] = Query(None, description="Filter by test ID or external test ID"),
+    subject: Optional[str] = Query(None, description="Filter by subject: physics, chemistry, biology"),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+):
+    """Retrieves all questions testing this topic via indexed MongoDB queries.
+
+    Performs zero runtime classification.
+    """
+    topic_repo = TopicRepository()
+    topic = await topic_repo.get_by_id_or_canonical_key(topic_identifier)
+    if not topic:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Topic '{topic_identifier}' not found."
+        )
+
+    test_repo = TestRepository()
+    resolved_test_id = None
+    if test_id:
+        test_doc = await test_repo.get_by_id_or_external_id(test_id)
+        if test_doc:
+            resolved_test_id = str(test_doc.id)
+        else:
+            resolved_test_id = test_id
+
+    subject_filter = None
+    if subject:
+        # Standardize subject filter
+        s_lower = subject.lower()
+        if s_lower == "physics":
+            subject_filter = Subject.PHYSICS
+        elif s_lower == "chemistry":
+            subject_filter = Subject.CHEMISTRY
+        elif s_lower == "biology":
+            subject_filter = Subject.BIOLOGY
+
+    skip = (page - 1) * page_size
+    question_topic_repo = QuestionTopicRepository()
+    question_repo = QuestionRepository()
+
+    total = await question_topic_repo.count_by_topic_id(
+        topic_id=str(topic.id),
+        test_id=resolved_test_id,
+        subject=subject_filter
+    )
+
+    rels = await question_topic_repo.find_by_topic_id(
+        topic_id=str(topic.id),
+        test_id=resolved_test_id,
+        subject=subject_filter,
+        skip=skip,
+        limit=page_size
+    )
+
+    if not rels:
+        return PaginatedResponse.create(items=[], total=total, page=page, page_size=page_size)
+
+    # Batch fetch questions by ID (no N+1!)
+    q_ids = [r.question_id for r in rels]
+    questions = await question_repo.get_by_ids(q_ids)
+    q_by_id = {str(q.id): q for q in questions}
+
+    # Batch fetch tests by ID
+    unique_test_ids = {r.test_id for r in rels}
+    test_names_by_id: Dict[str, str] = {}
+    for tid in unique_test_ids:
+        t_doc = await test_repo.get_by_id(tid)
+        if t_doc:
+            test_names_by_id[tid] = t_doc.name
+
+    items: List[QuestionItemResponse] = []
+    for r in rels:
+        q_doc = q_by_id.get(r.question_id)
+        if q_doc:
+            items.append(
+                QuestionItemResponse(
+                    id=str(q_doc.id),
+                    test_id=r.test_id,
+                    external_test_id=r.external_test_id or q_doc.external_test_id,
+                    test_name=test_names_by_id.get(r.test_id),
+                    question_number=q_doc.question_number,
+                    subject_question_number=q_doc.subject_question_number,
+                    subject=q_doc.subject,
+                    question_text=q_doc.question_text,
+                    options=q_doc.options,
+                    answer=q_doc.answer,
+                    source_page=q_doc.source_page,
+                    canonical_key=r.canonical_key,
+                    classification_method=r.classification_method,
+                    confidence=r.confidence,
+                )
+            )
+
+    return PaginatedResponse.create(items=items, total=total, page=page, page_size=page_size)
+

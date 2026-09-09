@@ -103,9 +103,19 @@ async def audit():
     # 4. Relationships Audit
     rel_count = await db.test_topics.count_documents({})
     print(f"\n4. BIDIRECTIONAL RELATIONSHIPS: {rel_count} Total Indexed Edges across all courses")
+
+    # 5. Questions & Question-Topic Relationships
+    q_count = await db.questions.count_documents({})
+    qt_count = await db.question_topics.count_documents({})
+    resolved_q_count = await db.questions.count_documents({"classification_status": "RESOLVED"})
+    print(f"\n5. QUESTION INTELLIGENCE AUDIT:")
+    print(f"   • Total Questions Extracted: {q_count}")
+    print(f"   • Questions Resolved to Topics: {resolved_q_count}")
+    print(f"   • Question ↔ Topic Relationships (question_topics): {qt_count}")
     print("=" * 65)
 
     await close_mongo_connection()
+
 
 
 if __name__ == "__main__":
