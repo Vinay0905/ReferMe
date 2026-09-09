@@ -104,6 +104,8 @@ export interface PaginatedResponse<T> {
 }
 
 
+import { logger } from "./logger";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1";
 
 // In-memory cache for ultra-low latency navigation
@@ -117,13 +119,24 @@ async function cachedFetch<T>(url: string): Promise<T> {
     return cached.data as T;
   }
 
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`API Error ${res.status}: ${res.statusText}`);
+  const startTime = typeof performance !== "undefined" ? performance.now() : Date.now();
+  try {
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    const duration = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startTime;
+    logger.api("GET", url, res.status, duration);
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => res.statusText);
+      throw new Error(`API Error ${res.status}: ${errText || res.statusText}`);
+    }
+    const data = await res.json();
+    cache.set(url, { data, expiry: now + CACHE_TTL });
+    return data;
+  } catch (err: any) {
+    const duration = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startTime;
+    logger.error(`API Fetch Error on ${url} (${duration.toFixed(1)}ms)`, err);
+    throw err;
   }
-  const data = await res.json();
-  cache.set(url, { data, expiry: now + CACHE_TTL });
-  return data;
 }
 
 export const api = {
