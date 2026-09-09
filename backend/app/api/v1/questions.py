@@ -79,6 +79,8 @@ async def get_question_image(question_id: str):
         page_num=q.source_page,
         bbox=bbox,
         output_path=output_file,
+        overflow_page=q.overflow_page,
+        overflow_bbox=q.overflow_bounding_box,
     )
 
     if not webp_bytes:

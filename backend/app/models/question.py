@@ -17,6 +17,8 @@ class QuestionModel(BaseMongoModel):
     artifact_id: Optional[str] = None  # References artifacts._id
     source_page: int = 1
     bounding_box: Optional[List[float]] = None  # [x0, y0, x1, y1] coordinates on source_page
+    overflow_page: Optional[int] = None  # Next page if question spills over
+    overflow_bounding_box: Optional[List[float]] = None  # [x0, y0, x1, y1] on overflow_page
     image_url: Optional[str] = None  # e.g. "/api/v1/questions/{id}/image"
     image_path: Optional[str] = None  # relative or absolute path on disk
     normalized_question_text: str = ""

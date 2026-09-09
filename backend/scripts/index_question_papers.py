@@ -81,14 +81,18 @@ async def index_stored_question_papers():
             # Determine image path and URL
             img_file = questions_img_dir / f"q_{eq.question_number}.webp"
             
-            # Pre-generate WebP crop (Option 3 Primary)
-            if not img_file.exists() and eq.bounding_box:
-                QuestionCropper.render_crop_webp(
-                    pdf_path=str(qp_file),
-                    page_num=eq.source_page,
-                    bbox=eq.bounding_box,
-                    output_path=str(img_file),
-                )
+            # Pre-generate WebP crop (Option 3 Primary with seamless cross-page stitch)
+            if eq.bounding_box:
+                # If question has an overflow region on next page, re-render to ensure seamless stitch
+                if not img_file.exists() or eq.overflow_page:
+                    QuestionCropper.render_crop_webp(
+                        pdf_path=str(qp_file),
+                        page_num=eq.source_page,
+                        bbox=eq.bounding_box,
+                        output_path=str(img_file),
+                        overflow_page=eq.overflow_page,
+                        overflow_bbox=eq.overflow_bounding_box,
+                    )
 
             q_entity = QuestionModel(
                 test_id=test_id,
@@ -102,6 +106,8 @@ async def index_stored_question_papers():
                 artifact_id=artifact_id,
                 source_page=eq.source_page,
                 bounding_box=eq.bounding_box,
+                overflow_page=eq.overflow_page,
+                overflow_bounding_box=eq.overflow_bounding_box,
                 image_url=None,  # Will be wired after question_id is assigned or generated
                 image_path=str(img_file) if img_file.exists() else None,
                 normalized_question_text=eq.normalized_question_text,

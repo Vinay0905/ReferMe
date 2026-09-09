@@ -23,6 +23,8 @@ class ExtractedQuestion:
     answer: Optional[str] = None
     source_page: int = 1
     bounding_box: Optional[List[float]] = None  # [x0, y0, x1, y1] on source_page
+    overflow_page: Optional[int] = None
+    overflow_bounding_box: Optional[List[float]] = None
     normalized_question_text: str = ""
     fingerprint: str = ""
 
@@ -110,7 +112,11 @@ class QuestionPaperParser:
 
                     norm_text = normalize_question_text(q_text)
                     fingerprint = compute_question_fingerprint(q_text)
-                    bbox = bboxes_by_q.get((raw_q["page"], q_num))
+                    
+                    geo_info = bboxes_by_q.get((raw_q["page"], q_num), {})
+                    bbox = geo_info.get("bbox") if isinstance(geo_info, dict) else geo_info
+                    overflow_p = geo_info.get("overflow_page") if isinstance(geo_info, dict) else None
+                    overflow_bbox = geo_info.get("overflow_bbox") if isinstance(geo_info, dict) else None
 
                     questions.append(
                         ExtractedQuestion(
@@ -122,6 +128,8 @@ class QuestionPaperParser:
                             answer=answer,
                             source_page=raw_q["page"],
                             bounding_box=bbox,
+                            overflow_page=overflow_p,
+                            overflow_bounding_box=overflow_bbox,
                             normalized_question_text=norm_text,
                             fingerprint=fingerprint,
                         )
@@ -170,7 +178,8 @@ class QuestionPaperParser:
     ) -> (List[Dict], Dict[tuple, List[float]]):
         """Extracts question line blocks and calculates high-precision bounding boxes per question."""
         raw_questions: List[Dict] = []
-        bboxes_by_q: Dict[tuple, List[float]] = {}
+        bboxes_by_q: Dict[tuple, Dict] = {}
+        page_markers_list: List[Dict] = []
         current_subject = Subject.PHYSICS
         current_q: Optional[Dict] = None
 
@@ -222,7 +231,7 @@ class QuestionPaperParser:
                     if current_q:
                         current_q["lines"].append(line_s)
 
-            # Compute bounding boxes for questions on this page
+            # Track question markers on this page for bbox and overflow detection
             try:
                 words = page.extract_words()
                 q_markers = []
@@ -231,25 +240,62 @@ class QuestionPaperParser:
                         num = int(q_word_re.match(w["text"]).group(1))
                         q_markers.append((num, float(w["top"])))
 
-                page_w = float(page.width)
-                page_h = float(page.height)
-                for i, (num, top) in enumerate(q_markers):
-                    y0 = max(0.0, top - 6.0)
-                    if i + 1 < len(q_markers):
-                        y1 = q_markers[i + 1][1] - 4.0
-                    else:
-                        y1 = min(page_h - 15.0, top + 350.0)
-                    bboxes_by_q[(page_num, num)] = [
+                page_markers_list.append({
+                    "page": page_num,
+                    "page_w": float(page.width),
+                    "page_h": float(page.height),
+                    "markers": q_markers,
+                })
+            except Exception as e:
+                logger.warning(f"Error extracting word markers on page {page_num}: {e}")
+
+        if current_q:
+            raw_questions.append(current_q)
+
+        # Post-process all pages to compute bounding boxes and cross-page overflow regions
+        for i, p_info in enumerate(page_markers_list):
+            page_num = p_info["page"]
+            page_w = p_info["page_w"]
+            page_h = p_info["page_h"]
+            q_markers = p_info["markers"]
+
+            for m_idx, (num, top) in enumerate(q_markers):
+                y0 = max(0.0, top - 6.0)
+                is_last_on_page = (m_idx + 1 == len(q_markers))
+
+                overflow_p = None
+                overflow_box = None
+
+                if not is_last_on_page:
+                    y1 = q_markers[m_idx + 1][1] - 4.0
+                else:
+                    # Last question on this page: extends towards bottom margin
+                    y1 = page_h - 15.0
+                    # Check if next page exists and begins with an overflow region
+                    if i + 1 < len(page_markers_list):
+                        next_p = page_markers_list[i + 1]
+                        if next_p["markers"]:
+                            first_next_top = next_p["markers"][0][1]
+                            # If first question on next page starts > 70pt down, top area is overflow
+                            if first_next_top > 70.0 and (first_next_top - 42.0) > 25.0:
+                                overflow_p = next_p["page"]
+                                overflow_box = [
+                                    round(30.0, 1),
+                                    42.0,
+                                    round(next_p["page_w"] - 30.0, 1),
+                                    round(first_next_top - 4.0, 1),
+                                ]
+
+                bboxes_by_q[(page_num, num)] = {
+                    "bbox": [
                         round(30.0, 1),
                         round(y0, 1),
                         round(page_w - 30.0, 1),
                         round(y1, 1),
-                    ]
-            except Exception as e:
-                logger.warning(f"Error computing bounding boxes on page {page_num}: {e}")
-
-        if current_q:
-            raw_questions.append(current_q)
+                    ],
+                    "overflow_page": overflow_p,
+                    "overflow_bbox": overflow_box,
+                }
 
         return raw_questions, bboxes_by_q
 
