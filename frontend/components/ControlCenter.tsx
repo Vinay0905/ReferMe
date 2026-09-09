@@ -39,22 +39,28 @@ export const ControlCenter: React.FC<ControlCenterProps> = ({
     <div className="flex flex-col gap-5 pb-6 border-b border-[#9564DD]/20">
       {/* Top Bar: Minimal Header + Course Dropdown + Floating Mode Pill Switcher */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 flex-wrap">
-        {/* ReferMe Brand Logo */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex items-center">
+        {/* ReferMe Brand Glassmorphic Badge */}
+        <div className="flex items-center gap-3.5 px-3 py-2 rounded-2xl bg-[#3E0F8D]/25 hover:bg-[#3E0F8D]/35 border border-[#9564DD]/35 hover:border-[#E4DA72]/50 backdrop-blur-md transition-all shadow-neon-purple group cursor-default">
+          <div className="relative flex items-center pr-1">
             <img
               src="/referme_logo.png"
               alt="ReferMe"
-              className="h-10 sm:h-11 w-auto object-contain drop-shadow-[0_0_12px_rgba(149,100,221,0.35)]"
+              className="h-9 sm:h-10 w-auto object-contain drop-shadow-[0_0_16px_rgba(228,218,114,0.3)] group-hover:scale-105 transition-transform duration-300"
             />
           </div>
+
+          <div className="h-7 w-[1px] bg-[#9564DD]/30 hidden sm:block" />
+
           <div className="flex flex-col justify-center">
             <div className="flex items-center gap-2">
-              <span className="text-[#E4DA72] text-[10px] px-2 py-0.5 rounded bg-[#E4DA72]/10 border border-[#E4DA72]/30 uppercase font-mono font-semibold tracking-wider">
-                NEET Intelligence
+              <span className="flex items-center gap-1.5 text-[#E4DA72] text-[10px] px-2 py-0.5 rounded-full bg-[#E4DA72]/15 border border-[#E4DA72]/40 uppercase font-mono font-bold tracking-wider">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#E4DA72] animate-pulse" />
+                NEET Studio
               </span>
             </div>
-            <p className="text-[11px] text-[#EEEEEE]/50 font-medium">Test ↔ Topic Discovery Studio</p>
+            <p className="text-[11px] text-[#EEEEEE]/60 font-medium tracking-tight mt-0.5">
+              Allen Test ↔ Topic Intelligence
+            </p>
           </div>
         </div>
 
