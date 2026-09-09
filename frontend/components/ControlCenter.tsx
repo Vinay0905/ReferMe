@@ -39,16 +39,22 @@ export const ControlCenter: React.FC<ControlCenterProps> = ({
     <div className="flex flex-col gap-5 pb-6 border-b border-[#9564DD]/20">
       {/* Top Bar: Minimal Header + Course Dropdown + Floating Mode Pill Switcher */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 flex-wrap">
-        {/* Minimal Brand */}
+        {/* ReferMe Brand Logo */}
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-[#3E0F8D] border border-[#9564DD] flex items-center justify-center shadow-neon-purple">
-            <Sparkles className="w-5 h-5 text-[#E4DA72]" />
+          <div className="relative flex items-center">
+            <img
+              src="/referme_logo.png"
+              alt="ReferMe"
+              className="h-10 sm:h-11 w-auto object-contain drop-shadow-[0_0_12px_rgba(149,100,221,0.35)]"
+            />
           </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-[#EEEEEE] flex items-center gap-2">
-              ALLEN NEET <span className="text-[#E4DA72] text-xs px-2 py-0.5 rounded bg-[#E4DA72]/10 border border-[#E4DA72]/30 uppercase font-mono">Intelligence</span>
-            </h1>
-            <p className="text-xs text-[#EEEEEE]/60">Bidirectional Test ↔ Topic Engine</p>
+          <div className="flex flex-col justify-center">
+            <div className="flex items-center gap-2">
+              <span className="text-[#E4DA72] text-[10px] px-2 py-0.5 rounded bg-[#E4DA72]/10 border border-[#E4DA72]/30 uppercase font-mono font-semibold tracking-wider">
+                NEET Intelligence
+              </span>
+            </div>
+            <p className="text-[11px] text-[#EEEEEE]/50 font-medium">Test ↔ Topic Discovery Studio</p>
           </div>
         </div>
 
