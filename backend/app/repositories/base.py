@@ -47,3 +47,8 @@ class BaseRepository(Generic[T]):
 
     async def count(self, filter_query: Optional[Dict[str, Any]] = None) -> int:
         return await self.collection.count_documents(filter_query or {})
+
+    async def update(self, doc_id: str, fields: Dict[str, Any]) -> bool:
+        query = {"_id": ObjectId(doc_id) if ObjectId.is_valid(doc_id) else doc_id}
+        result = await self.collection.update_one(query, {"$set": fields})
+        return result.modified_count > 0

@@ -237,6 +237,8 @@ async def get_topic_questions(
                     options=q_doc.options,
                     answer=q_doc.answer,
                     source_page=q_doc.source_page,
+                    bounding_box=q_doc.bounding_box,
+                    image_url=q_doc.image_url or f"/api/v1/questions/{str(q_doc.id)}/image",
                     canonical_key=r.canonical_key,
                     classification_method=r.classification_method,
                     confidence=r.confidence,

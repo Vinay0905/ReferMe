@@ -44,10 +44,20 @@ class QuestionRepository(BaseRepository[QuestionModel]):
         await self.collection.delete_many({"test_id": test_id})
         if not questions:
             return []
-        docs = [q.model_dump(by_alias=True, exclude={"id"}) for q in questions]
-        result = await self.collection.insert_many(docs)
-        inserted_ids = [str(oid) for oid in result.inserted_ids]
-        # Attach the inserted ids back to the entities
-        for q, q_id in zip(questions, inserted_ids):
-            q.id = q_id
+
+        # Pre-generate ObjectIds and wire image_urls
+        docs = []
+        inserted_ids = []
+        for q in questions:
+            oid = ObjectId()
+            oid_str = str(oid)
+            q.id = oid_str
+            if not q.image_url:
+                q.image_url = f"/api/v1/questions/{oid_str}/image"
+            d = q.model_dump(by_alias=True)
+            d["_id"] = oid
+            docs.append(d)
+            inserted_ids.append(oid_str)
+
+        await self.collection.insert_many(docs)
         return inserted_ids

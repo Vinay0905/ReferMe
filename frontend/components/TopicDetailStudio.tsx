@@ -11,6 +11,9 @@ import {
   ArrowRight,
   Sparkles,
   Search,
+  Image as ImageIcon,
+  FileText,
+  Maximize2,
 } from "lucide-react";
 
 interface TopicDetailStudioProps {
@@ -35,6 +38,8 @@ export const TopicDetailStudio: React.FC<TopicDetailStudioProps> = ({
   const [totalQuestions, setTotalQuestions] = useState<number>(0);
   const [loadingQuestions, setLoadingQuestions] = useState<boolean>(true);
   const [questionSearch, setQuestionSearch] = useState<string>("");
+  const [viewMode, setViewMode] = useState<"visual" | "text">("visual");
+  const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -167,10 +172,10 @@ export const TopicDetailStudio: React.FC<TopicDetailStudioProps> = ({
       {/* TAB CONTENT 1: QUESTIONS FEED */}
       {activeTab === "questions" && (
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Subheader Search Bar */}
+          {/* Subheader Search & View Mode Bar */}
           {questions.length > 0 && (
-            <div className="p-3 border-b border-[#9564DD]/20 bg-[#3E0F8D]/10">
-              <div className="relative">
+            <div className="p-3 border-b border-[#9564DD]/20 bg-[#3E0F8D]/10 flex items-center justify-between gap-3 flex-wrap">
+              <div className="relative flex-1 min-w-[200px]">
                 <Search className="w-3.5 h-3.5 text-[#EEEEEE]/40 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
@@ -179,6 +184,34 @@ export const TopicDetailStudio: React.FC<TopicDetailStudioProps> = ({
                   onChange={(e) => setQuestionSearch(e.target.value)}
                   className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-[#0A0518]/60 border border-[#9564DD]/30 text-xs text-[#EEEEEE] placeholder-[#EEEEEE]/40 focus:outline-none focus:border-[#E4DA72]"
                 />
+              </div>
+
+              {/* View Mode Toggle: Visual vs Text */}
+              <div className="flex items-center p-0.5 rounded-lg bg-[#0A0518]/70 border border-[#9564DD]/30 shrink-0">
+                <button
+                  onClick={() => setViewMode("visual")}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                    viewMode === "visual"
+                      ? "bg-[#9564DD] text-[#EEEEEE] shadow-sm"
+                      : "text-[#EEEEEE]/60 hover:text-[#EEEEEE]"
+                  }`}
+                  title="View original high-fidelity question snippet with diagrams and formulas"
+                >
+                  <ImageIcon className="w-3.5 h-3.5 text-[#E4DA72]" />
+                  <span>Visual PDF</span>
+                </button>
+                <button
+                  onClick={() => setViewMode("text")}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                    viewMode === "text"
+                      ? "bg-[#9564DD] text-[#EEEEEE] shadow-sm"
+                      : "text-[#EEEEEE]/60 hover:text-[#EEEEEE]"
+                  }`}
+                  title="View extracted text representation"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Text</span>
+                </button>
               </div>
             </div>
           )}
@@ -236,40 +269,67 @@ export const TopicDetailStudio: React.FC<TopicDetailStudioProps> = ({
                     </div>
                   </div>
 
-                  {/* Question Text */}
-                  <div className="text-sm font-medium text-[#EEEEEE] leading-relaxed select-text">
-                    {q.question_text}
-                  </div>
-
-                  {/* Options (1) - (4) */}
-                  {q.options && q.options.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1">
-                      {q.options.map((opt, optIdx) => {
-                        const optNumber = (optIdx + 1).toString();
-                        const isCorrect = q.answer === optNumber;
-                        return (
-                          <div
-                            key={optIdx}
-                            className={`p-2 rounded-lg border text-xs flex items-start gap-2 transition-all ${
-                              isCorrect
-                                ? "bg-[#E4DA72]/15 border-[#E4DA72] text-[#E4DA72] font-semibold"
-                                : "bg-[#0A0518]/40 border-[#9564DD]/25 text-[#EEEEEE]/80"
-                            }`}
-                          >
-                            <span
-                              className={`font-mono text-[11px] px-1.5 py-0.2 rounded shrink-0 ${
-                                isCorrect
-                                  ? "bg-[#E4DA72] text-[#0A0518] font-bold"
-                                  : "bg-[#3E0F8D]/60 text-[#EEEEEE]/60"
-                              }`}
-                            >
-                              ({optNumber})
-                            </span>
-                            <span className="select-text leading-snug">{opt || `Option ${optNumber}`}</span>
-                          </div>
-                        );
-                      })}
+                  {/* Question Content: Visual PDF Snippet vs Text */}
+                  {viewMode === "visual" ? (
+                    <div className="space-y-2">
+                      <div className="relative rounded-lg overflow-hidden bg-white/95 border border-[#9564DD]/40 p-2 shadow-inner group/img">
+                        <img
+                          src={q.image_url ? `http://127.0.0.1:8000${q.image_url}` : `http://127.0.0.1:8000/api/v1/questions/${q.id}/image`}
+                          alt={`Question ${q.question_number}`}
+                          loading="lazy"
+                          className="w-full h-auto object-contain max-h-[380px] rounded"
+                          onError={(e) => {
+                            // If image fails to load, gracefully fall back to text
+                            (e.target as HTMLElement).style.display = "none";
+                          }}
+                        />
+                        <button
+                          onClick={() => setEnlargedImage(q.image_url ? `http://127.0.0.1:8000${q.image_url}` : `http://127.0.0.1:8000/api/v1/questions/${q.id}/image`)}
+                          className="absolute top-3 right-3 p-1.5 rounded-md bg-[#0A0518]/80 text-[#EEEEEE] opacity-0 group-hover/img:opacity-100 transition-opacity hover:bg-[#9564DD] hover:text-white"
+                          title="Enlarge question image"
+                        >
+                          <Maximize2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
+                  ) : (
+                    <>
+                      {/* Question Text */}
+                      <div className="text-sm font-medium text-[#EEEEEE] leading-relaxed select-text">
+                        {q.question_text}
+                      </div>
+
+                      {/* Options (1) - (4) */}
+                      {q.options && q.options.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1">
+                          {q.options.map((opt, optIdx) => {
+                            const optNumber = (optIdx + 1).toString();
+                            const isCorrect = q.answer === optNumber;
+                            return (
+                              <div
+                                key={optIdx}
+                                className={`p-2 rounded-lg border text-xs flex items-start gap-2 transition-all ${
+                                  isCorrect
+                                    ? "bg-[#E4DA72]/15 border-[#E4DA72] text-[#E4DA72] font-semibold"
+                                    : "bg-[#0A0518]/40 border-[#9564DD]/25 text-[#EEEEEE]/80"
+                                }`}
+                              >
+                                <span
+                                  className={`font-mono text-[11px] px-1.5 py-0.2 rounded shrink-0 ${
+                                    isCorrect
+                                      ? "bg-[#E4DA72] text-[#0A0518] font-bold"
+                                      : "bg-[#3E0F8D]/60 text-[#EEEEEE]/60"
+                                  }`}
+                                >
+                                  ({optNumber})
+                                </span>
+                                <span className="select-text leading-snug">{opt || `Option ${optNumber}`}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
                   )}
 
                   {/* Footer Action */}
@@ -350,6 +410,31 @@ export const TopicDetailStudio: React.FC<TopicDetailStudioProps> = ({
               </div>
             ))
           )}
+        </div>
+      )}
+
+      {/* Lightbox / Modal for enlarged question image */}
+      {enlargedImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setEnlargedImage(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] bg-white rounded-xl p-3 shadow-2xl overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setEnlargedImage(null)}
+              className="absolute top-2 right-2 p-1.5 rounded-full bg-[#0A0518] text-white hover:bg-[#9564DD] transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <img
+              src={enlargedImage}
+              alt="Enlarged Question"
+              className="w-full h-auto object-contain max-h-[85vh] rounded"
+            />
+          </div>
         </div>
       )}
     </div>

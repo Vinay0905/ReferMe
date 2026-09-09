@@ -13,6 +13,7 @@ from app.models.common import utc_now
 from app.models.question import QuestionModel
 from app.models.relationship import QuestionTopicModel
 from app.processing.question_classifier import CandidateTopic, QuestionClassifier
+from app.processing.question_cropper import QuestionCropper
 from app.processing.question_parser import QuestionPaperParser
 from app.repositories.artifact_repo import ArtifactRepository
 from app.repositories.question_repo import QuestionRepository
@@ -71,8 +72,24 @@ async def index_stored_question_papers():
         qp_artifact = await artifact_repo.collection.find_one({"test_id": test_id, "kind": "question_paper"})
         artifact_id = str(qp_artifact["_id"]) if qp_artifact else None
 
+        # Prepare directory for pre-generated question WebP crops
+        questions_img_dir = storage_dir / "questions"
+        questions_img_dir.mkdir(parents=True, exist_ok=True)
+
         question_entities = []
         for eq in parsed_qp.questions:
+            # Determine image path and URL
+            img_file = questions_img_dir / f"q_{eq.question_number}.webp"
+            
+            # Pre-generate WebP crop (Option 3 Primary)
+            if not img_file.exists() and eq.bounding_box:
+                QuestionCropper.render_crop_webp(
+                    pdf_path=str(qp_file),
+                    page_num=eq.source_page,
+                    bbox=eq.bounding_box,
+                    output_path=str(img_file),
+                )
+
             q_entity = QuestionModel(
                 test_id=test_id,
                 external_test_id=ext_id,
@@ -84,6 +101,9 @@ async def index_stored_question_papers():
                 answer=eq.answer,
                 artifact_id=artifact_id,
                 source_page=eq.source_page,
+                bounding_box=eq.bounding_box,
+                image_url=None,  # Will be wired after question_id is assigned or generated
+                image_path=str(img_file) if img_file.exists() else None,
                 normalized_question_text=eq.normalized_question_text,
                 fingerprint=eq.fingerprint,
                 parser_version=QuestionPaperParser.VERSION,
@@ -131,7 +151,7 @@ async def index_stored_question_papers():
                         created_at=utc_now()
                     ))
 
-        # Atomically replace questions for this test with updated classification_status
+        # Atomically replace questions for this test with updated classification_status & image_urls
         await question_repo.replace_for_test(test_id, question_entities)
 
         # Wire question_id into question_topics

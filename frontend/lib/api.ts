@@ -88,6 +88,8 @@ export interface QuestionItem {
   options: string[];
   answer?: string;
   source_page: number;
+  bounding_box?: number[];
+  image_url?: string;
   canonical_key: string;
   classification_method: string;
   confidence: number;
