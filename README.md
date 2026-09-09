@@ -293,6 +293,7 @@ pytest tests/test_ingestion.py -v
 
 Comprehensive architectural design records and implementation notes are maintained in the repository:
 
+- [`DEPLOYMENT.md`](DEPLOYMENT.md) — One-command Docker replication, database migration, and cloud storage (S3/R2) guide.
 - [`Agent.md`](Agent.md) — Master operating context, invariants, and product requirements.
 - [`PHASE_1_GUIDE.md`](PHASE_1_GUIDE.md) — MongoDB schemas, repositories, and local storage provider.
 - [`PHASE_2_GUIDE.md`](PHASE_2_GUIDE.md) — Deterministic PDF parsing and canonical topic normalization.

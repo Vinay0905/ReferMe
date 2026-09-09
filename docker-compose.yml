@@ -1,0 +1,85 @@
+services:
+  # 1. MongoDB Database (or use managed Atlas by setting MONGODB_URI)
+  mongodb:
+    image: mongo:7.0
+    container_name: referme-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: referme_neet_dev
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. FastAPI Backend Intelligence Engine
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: referme-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - PROJECT_NAME=ALLEN NEET Test ↔ Topic Intelligence System
+      - API_V1_STR=/api/v1
+      # Connect to local docker mongo or replace with your MongoDB Atlas connection string
+      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_DB_NAME=referme_neet_dev
+      - STORAGE_PROVIDER=local
+      - LOCAL_STORAGE_DIR=/app/storage_data
+      - DEFAULT_PAGE_SIZE=25
+      - MAX_CONCURRENT_REQUESTS=3
+      - REQUEST_TIMEOUT_SECONDS=30
+    volumes:
+      # Persistent PDF and WebP crop storage
+      - backend_storage:/app/storage_data
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  # 3. Next.js Discovery Studio Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+    container_name: referme-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+    depends_on:
+      - backend
+
+  # 4. (Optional) Auto-Replication Job: Copies Atlas DB into Local Docker Mongo on demand
+  # Run via: docker compose run --rm replicator
+  replicator:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: referme-replicator
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_DB_NAME=referme_neet_dev
+    volumes:
+      - backend_storage:/app/storage_data
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    command: ["python", "scripts/replicate_database.py", "--target-uri", "mongodb://mongodb:27017", "--sync-storage"]
+    profiles: ["tools"]
+
+volumes:
+  mongo_data:
+    driver: local
+  backend_storage:
+    driver: local
