@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { TestItem, TestTopicsGrouped, api } from "@/lib/api";
-import { ExternalLink, X, FileText, CheckCircle2, AlertCircle, ListFilter, Download } from "lucide-react";
+import { ExternalLink, X, FileText, CheckCircle2, AlertCircle, ListFilter, Download, Maximize2, Minimize2 } from "lucide-react";
 
 interface PdfStudioProps {
   test: TestItem;
@@ -10,6 +10,8 @@ interface PdfStudioProps {
   initialKind?: "syllabus" | "question_paper";
   onClose: () => void;
   onSelectTopic?: (canonicalKey: string) => void;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
 export const PdfStudio: React.FC<PdfStudioProps> = ({
@@ -18,6 +20,8 @@ export const PdfStudio: React.FC<PdfStudioProps> = ({
   initialKind = "syllabus",
   onClose,
   onSelectTopic,
+  isExpanded = false,
+  onToggleExpand,
 }) => {
   const [activeTab, setActiveTab] = useState<"syllabus" | "question_paper" | "breakdown">(initialKind);
 
@@ -51,6 +55,15 @@ export const PdfStudio: React.FC<PdfStudioProps> = ({
             >
               <ExternalLink className="w-4 h-4" />
             </a>
+          )}
+          {onToggleExpand && (
+            <button
+              onClick={onToggleExpand}
+              className="p-2 rounded-lg bg-[#3E0F8D]/60 hover:bg-[#9564DD] border border-[#9564DD]/40 text-[#EEEEEE] transition-all"
+              title={isExpanded ? "Exit Full Window (Esc)" : "Expand to Full Window"}
+            >
+              {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
           )}
           <button
             onClick={onClose}

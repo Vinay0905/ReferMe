@@ -28,6 +28,7 @@ class PDFTextExtractor:
     """Extracts native text and page metadata from PDF bytes deterministically."""
 
     MIN_PDF_BYTES = 128
+    MAX_PDF_BYTES = 35 * 1024 * 1024  # 35 MB bound to prevent memory exhaustion / DoS
 
     @classmethod
     def sanitize_pdf_bytes(cls, content: bytes) -> bytes:
@@ -44,8 +45,8 @@ class PDFTextExtractor:
 
     @classmethod
     def validate_pdf_bytes(cls, content: bytes) -> bool:
-        """Ensures the content contains valid PDF magic header and isn't HTML/error response."""
-        if not content or len(content) < cls.MIN_PDF_BYTES:
+        """Ensures the content contains valid PDF magic header, within size bounds, and isn't HTML/error response."""
+        if not content or len(content) < cls.MIN_PDF_BYTES or len(content) > cls.MAX_PDF_BYTES:
             return False
         # Ensure it's not HTML error page
         sample = content[:300].lower()

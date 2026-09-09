@@ -14,18 +14,26 @@ import {
   Image as ImageIcon,
   FileText,
   Maximize2,
+  Minimize2,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
 } from "lucide-react";
 
 interface TopicDetailStudioProps {
   topic: TopicItem;
   onClose: () => void;
   onInspectTest: (testId: string) => void;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
 export const TopicDetailStudio: React.FC<TopicDetailStudioProps> = ({
   topic,
   onClose,
   onInspectTest,
+  isExpanded = false,
+  onToggleExpand,
 }) => {
   const [activeTab, setActiveTab] = useState<"questions" | "tests">("questions");
 
@@ -39,7 +47,8 @@ export const TopicDetailStudio: React.FC<TopicDetailStudioProps> = ({
   const [loadingQuestions, setLoadingQuestions] = useState<boolean>(true);
   const [questionSearch, setQuestionSearch] = useState<string>("");
   const [viewMode, setViewMode] = useState<"visual" | "text">("visual");
-  const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
+  const [enlargedQuestion, setEnlargedQuestion] = useState<QuestionItem | null>(null);
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
 
   useEffect(() => {
     let isMounted = true;
@@ -90,6 +99,20 @@ export const TopicDetailStudio: React.FC<TopicDetailStudioProps> = ({
     );
   });
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (enlargedQuestion) {
+          setEnlargedQuestion(null);
+        } else if (isExpanded && onToggleExpand) {
+          onToggleExpand();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [enlargedQuestion, isExpanded, onToggleExpand]);
+
   return (
     <div className="h-full flex flex-col rounded-2xl bg-[#3E0F8D]/20 border border-[#9564DD]/40 backdrop-blur-xl overflow-hidden shadow-2xl">
       {/* Studio Header */}
@@ -123,13 +146,24 @@ export const TopicDetailStudio: React.FC<TopicDetailStudioProps> = ({
           </h2>
         </div>
 
-        <button
-          onClick={onClose}
-          className="p-2 rounded-lg bg-[#3E0F8D]/60 hover:bg-[#9564DD] border border-[#9564DD]/40 text-[#EEEEEE] transition-all"
-          title="Close"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          {onToggleExpand && (
+            <button
+              onClick={onToggleExpand}
+              className="p-2 rounded-lg bg-[#3E0F8D]/60 hover:bg-[#9564DD] border border-[#9564DD]/40 text-[#EEEEEE] transition-all"
+              title={isExpanded ? "Exit Full Window (Esc)" : "Expand Studio to Full Window"}
+            >
+              {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg bg-[#3E0F8D]/60 hover:bg-[#9564DD] border border-[#9564DD]/40 text-[#EEEEEE] transition-all"
+            title="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Navigation Tabs: Questions vs Scheduled Tests */}
@@ -277,18 +311,21 @@ export const TopicDetailStudio: React.FC<TopicDetailStudioProps> = ({
                           src={q.image_url ? `http://127.0.0.1:8000${q.image_url}` : `http://127.0.0.1:8000/api/v1/questions/${q.id}/image`}
                           alt={`Question ${q.question_number}`}
                           loading="lazy"
-                          className="w-full h-auto object-contain max-h-[380px] rounded"
+                          className="w-full h-auto object-contain max-h-[520px] rounded"
                           onError={(e) => {
                             // If image fails to load, gracefully fall back to text
                             (e.target as HTMLElement).style.display = "none";
                           }}
                         />
                         <button
-                          onClick={() => setEnlargedImage(q.image_url ? `http://127.0.0.1:8000${q.image_url}` : `http://127.0.0.1:8000/api/v1/questions/${q.id}/image`)}
-                          className="absolute top-3 right-3 p-1.5 rounded-md bg-[#0A0518]/80 text-[#EEEEEE] opacity-0 group-hover/img:opacity-100 transition-opacity hover:bg-[#9564DD] hover:text-white"
-                          title="Enlarge question image"
+                          onClick={() => {
+                            setEnlargedQuestion(q);
+                            setZoomLevel(1);
+                          }}
+                          className="absolute top-3 right-3 p-2 rounded-lg bg-[#0A0518]/90 text-[#EEEEEE] opacity-0 group-hover/img:opacity-100 transition-all hover:bg-[#9564DD] hover:text-white shadow-lg border border-[#9564DD]/40"
+                          title="Expand Question to Full Window"
                         >
-                          <Maximize2 className="w-3.5 h-3.5" />
+                          <Maximize2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -413,27 +450,107 @@ export const TopicDetailStudio: React.FC<TopicDetailStudioProps> = ({
         </div>
       )}
 
-      {/* Lightbox / Modal for enlarged question image */}
-      {enlargedImage && (
+      {/* Full-Window Immersion Lightbox for Question Preview */}
+      {enlargedQuestion && (
         <div
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setEnlargedImage(null)}
+          className="fixed inset-0 z-[9999] bg-[#0A0518]/95 backdrop-blur-xl flex flex-col p-3 sm:p-6 select-none animate-in fade-in duration-200"
+          onClick={() => setEnlargedQuestion(null)}
         >
+          {/* Top Floating Control Bar */}
           <div
-            className="relative max-w-4xl max-h-[90vh] bg-white rounded-xl p-3 shadow-2xl overflow-auto"
+            className="w-full max-w-7xl mx-auto flex items-center justify-between gap-4 pb-3 border-b border-[#9564DD]/30 shrink-0"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={() => setEnlargedImage(null)}
-              className="absolute top-2 right-2 p-1.5 rounded-full bg-[#0A0518] text-white hover:bg-[#9564DD] transition-colors"
+            {/* Question Info Pill */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-xs px-2.5 py-1 rounded-lg bg-[#3E0F8D] text-[#E4DA72] font-bold border border-[#9564DD]">
+                Q.{enlargedQuestion.question_number}
+                {enlargedQuestion.subject_question_number && ` (${enlargedQuestion.subject} #${enlargedQuestion.subject_question_number})`}
+              </span>
+              {enlargedQuestion.test_name && (
+                <span className="text-xs font-semibold text-[#EEEEEE]/90 px-2 py-0.5 rounded bg-[#3E0F8D]/40 border border-[#9564DD]/30">
+                  {enlargedQuestion.test_name}
+                </span>
+              )}
+              {enlargedQuestion.source_page && (
+                <span className="font-mono text-xs text-[#EEEEEE]/50">
+                  Page {enlargedQuestion.source_page}
+                </span>
+              )}
+              {enlargedQuestion.answer && (
+                <span className="flex items-center gap-1 font-mono text-xs font-bold px-2 py-0.5 rounded bg-[#E4DA72]/20 border border-[#E4DA72]/50 text-[#E4DA72]">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Answer: ({enlargedQuestion.answer})
+                </span>
+              )}
+            </div>
+
+            {/* Zoom Controls & Close Button */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 px-2 py-1 rounded-xl bg-[#3E0F8D]/40 border border-[#9564DD]/40 text-xs text-[#EEEEEE]">
+                <button
+                  onClick={() => setZoomLevel((z) => Math.max(0.7, +(z - 0.2).toFixed(1)))}
+                  disabled={zoomLevel <= 0.7}
+                  className="p-1 rounded hover:bg-[#9564DD]/60 disabled:opacity-40 disabled:hover:bg-transparent transition-all"
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <span className="font-mono text-xs px-1.5 min-w-[46px] text-center text-[#E4DA72]">
+                  {Math.round(zoomLevel * 100)}%
+                </span>
+                <button
+                  onClick={() => setZoomLevel((z) => Math.min(2.5, +(z + 0.2).toFixed(1)))}
+                  disabled={zoomLevel >= 2.5}
+                  className="p-1 rounded hover:bg-[#9564DD]/60 disabled:opacity-40 disabled:hover:bg-transparent transition-all"
+                  title="Zoom In"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                {zoomLevel !== 1 && (
+                  <button
+                    onClick={() => setZoomLevel(1)}
+                    className="p-1 rounded hover:bg-[#9564DD]/60 text-[#EEEEEE]/60 hover:text-white transition-all ml-1"
+                    title="Reset Zoom"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <button
+                onClick={() => setEnlargedQuestion(null)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-950/60 hover:bg-red-800 border border-red-500/50 text-white text-xs font-semibold transition-all shadow-lg"
+                title="Close Full Window (Esc)"
+              >
+                <X className="w-4 h-4" />
+                <span className="hidden sm:inline">Close (Esc)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Main Full-Window Canvas */}
+          <div
+            className="flex-1 w-full max-w-7xl mx-auto flex items-center justify-center overflow-auto p-2 sm:p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className="relative max-w-full max-h-full bg-white rounded-2xl p-4 sm:p-8 shadow-2xl border border-white/20 transition-transform duration-100 ease-out overflow-auto"
+              style={{
+                transform: `scale(${zoomLevel})`,
+                transformOrigin: "center center",
+              }}
             >
-              <X className="w-4 h-4" />
-            </button>
-            <img
-              src={enlargedImage}
-              alt="Enlarged Question"
-              className="w-full h-auto object-contain max-h-[85vh] rounded"
-            />
+              <img
+                src={
+                  enlargedQuestion.image_url
+                    ? `http://127.0.0.1:8000${enlargedQuestion.image_url}`
+                    : `http://127.0.0.1:8000/api/v1/questions/${enlargedQuestion.id}/image`
+                }
+                alt={`Question ${enlargedQuestion.question_number}`}
+                className="w-auto h-auto max-w-[90vw] max-h-[80vh] object-contain rounded select-none"
+              />
+            </div>
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 from pydantic import BaseModel
 from app.config import get_settings
+from app.core.security import sanitize_url_for_logging, validate_safe_url
 from app.processing.extractor import PDFTextExtractor
 from app.integrations.allen.mock_data import (
     MOCK_ALLEN_TEST_CARDS,
@@ -219,13 +220,17 @@ class AllenClient:
                 logger.warning(f"No syllabus PDF URL returned for test {test_id}.")
                 return None
 
+            if not validate_safe_url(s3_url):
+                logger.warning(f"Refused to download syllabus PDF for test {test_id}: untrusted or unsafe URL {sanitize_url_for_logging(s3_url)}")
+                return None
+
             # Download the binary PDF
             try:
                 pdf_resp = await client.get(s3_url)
                 pdf_resp.raise_for_status()
                 return PDFTextExtractor.sanitize_pdf_bytes(pdf_resp.content)
             except Exception as pdf_err:
-                logger.warning(f"Failed to download syllabus PDF for test {test_id} from {s3_url}: {pdf_err}")
+                logger.warning(f"Failed to download syllabus PDF for test {test_id} from {sanitize_url_for_logging(s3_url)}: {pdf_err}")
                 return None
 
     async def get_question_paper_pdf(self, test_id: str) -> Optional[bytes]:
@@ -265,10 +270,14 @@ class AllenClient:
             if not s3_url:
                 return None
 
+            if not validate_safe_url(s3_url):
+                logger.warning(f"Refused to download question paper PDF for test {test_id}: untrusted or unsafe URL {sanitize_url_for_logging(s3_url)}")
+                return None
+
             try:
                 pdf_resp = await client.get(s3_url)
                 pdf_resp.raise_for_status()
                 return PDFTextExtractor.sanitize_pdf_bytes(pdf_resp.content)
             except Exception as e:
-                logger.warning(f"Could not download question paper PDF for test {test_id} from {s3_url}: {e}")
+                logger.warning(f"Could not download question paper PDF for test {test_id} from {sanitize_url_for_logging(s3_url)}: {e}")
                 return None

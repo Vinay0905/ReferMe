@@ -8,7 +8,7 @@ import { TestCard } from "@/components/TestCard";
 import { CleanHud } from "@/components/CleanHud";
 import { PdfStudio } from "@/components/PdfStudio";
 import { TopicDetailStudio } from "@/components/TopicDetailStudio";
-import { RefreshCw, AlertCircle, GraduationCap } from "lucide-react";
+import { RefreshCw, AlertCircle, GraduationCap, GripVertical } from "lucide-react";
 
 export default function StudioPage() {
   const [viewMode, setViewMode] = useState<"topics" | "tests">("topics");
@@ -27,7 +27,14 @@ export default function StudioPage() {
   const [selectedTopic, setSelectedTopic] = useState<TopicItem | null>(null);
   const [previewKind, setPreviewKind] = useState<"syllabus" | "question_paper">("syllabus");
 
-  // Initial Load
+  // Draggable Split Pane & Full-Window State
+  const [splitPercent, setSplitPercent] = useState<number>(52);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [isLgScreen, setIsLgScreen] = useState<boolean>(false);
+  const [isStudioExpanded, setIsStudioExpanded] = useState<boolean>(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // Initial Load & Screen Size Listener
   const loadData = async () => {
     setLoading(true);
     setError(null);
@@ -48,7 +55,65 @@ export default function StudioPage() {
 
   useEffect(() => {
     loadData();
+
+    // Restore saved split preference
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("referme_split_percent");
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed >= 22 && parsed <= 78) {
+          setSplitPercent(parsed);
+        }
+      }
+      const checkLg = () => setIsLgScreen(window.innerWidth >= 1024);
+      checkLg();
+      window.addEventListener("resize", checkLg);
+      return () => window.removeEventListener("resize", checkLg);
+    }
   }, []);
+
+  // Keyboard shortcut to exit full window
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isStudioExpanded) {
+        setIsStudioExpanded(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isStudioExpanded]);
+
+  // Pointer drag handlers for split divider
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const rawPercent = ((e.clientX - rect.left) / rect.width) * 100;
+    const clamped = Math.min(78, Math.max(22, rawPercent));
+    setSplitPercent(clamped);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDragging) {
+      setIsDragging(false);
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch {}
+      localStorage.setItem("referme_split_percent", splitPercent.toFixed(1));
+    }
+  };
+
+  const handleResetSplit = () => {
+    setSplitPercent(52);
+    localStorage.setItem("referme_split_percent", "52.0");
+  };
 
   // Filtered Topics
   const filteredTopics = useMemo(() => {
@@ -155,10 +220,58 @@ export default function StudioPage() {
 
   return (
     <main className="min-h-screen p-4 md:p-8 max-w-[1700px] mx-auto">
-      {/* Studio Grid: Left 3D Stream + Right Inline Studio */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* LEFT COLUMN: Control Center & 3D Cards Stream (col-span-7) */}
-        <section className="lg:col-span-7 flex flex-col gap-6">
+      {/* FULL WINDOW STUDIO FOCUS MODE */}
+      {isStudioExpanded && (selectedTest || selectedTopic) && (
+        <div className="fixed inset-0 z-50 bg-[#0A0518]/95 backdrop-blur-2xl p-3 md:p-6 flex flex-col animate-in fade-in zoom-in-95 duration-200">
+          <div className="h-full w-full max-w-[1800px] mx-auto flex flex-col">
+            {selectedTest ? (
+              <PdfStudio
+                test={selectedTest}
+                topicsGrouped={selectedTestTopics}
+                initialKind={previewKind}
+                onClose={() => {
+                  setSelectedTest(null);
+                  setSelectedTestTopics(null);
+                  setIsStudioExpanded(false);
+                }}
+                onSelectTopic={(key) => {
+                  const found = topics.find((t) => t.canonical_key === key);
+                  if (found) handleSelectTopic(found);
+                }}
+                isExpanded={true}
+                onToggleExpand={() => setIsStudioExpanded(false)}
+              />
+            ) : selectedTopic ? (
+              <TopicDetailStudio
+                topic={selectedTopic}
+                onClose={() => {
+                  setSelectedTopic(null);
+                  setIsStudioExpanded(false);
+                }}
+                onInspectTest={handleInspectTestFromTopic}
+                isExpanded={true}
+                onToggleExpand={() => setIsStudioExpanded(false)}
+              />
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* Studio Split Layout: Left 3D Stream + Draggable Divider + Right Inline Studio */}
+      <div
+        ref={containerRef}
+        className={`flex flex-col lg:flex-row items-start gap-0 relative w-full ${
+          isDragging ? "select-none cursor-col-resize" : ""
+        }`}
+      >
+        {/* LEFT COLUMN: Control Center & 3D Cards Stream */}
+        <section
+          className="w-full flex flex-col gap-6 shrink-0 transition-none"
+          style={{
+            width: isLgScreen ? `${splitPercent}%` : "100%",
+            maxWidth: isLgScreen ? `${splitPercent}%` : "100%",
+          }}
+        >
           <ControlCenter
             viewMode={viewMode}
             setViewMode={(m) => {
@@ -194,7 +307,7 @@ export default function StudioPage() {
 
           {/* Card Stream */}
           {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] gap-4">
               {[1, 2, 3, 4, 5, 6].map((i) => (
                 <div
                   key={i}
@@ -218,7 +331,7 @@ export default function StudioPage() {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-12">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] gap-4 pb-12">
                 {filteredTopics.map((topic) => (
                   <TopicCard
                     key={topic.id}
@@ -263,7 +376,7 @@ export default function StudioPage() {
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-12">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] gap-4 pb-12">
                 {filteredTests.map((test) => (
                   <TestCard
                     key={test.id}
@@ -278,8 +391,47 @@ export default function StudioPage() {
           )}
         </section>
 
-        {/* RIGHT COLUMN: Sticky Inline Preview Studio (col-span-5) */}
-        <section className="lg:col-span-5 sticky top-8 h-[calc(100vh-4rem)] hidden lg:block">
+        {/* DRAGGABLE DIVIDER (Desktop lg+) */}
+        <div
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          onDoubleClick={handleResetSplit}
+          className="hidden lg:flex items-center justify-center w-6 cursor-col-resize shrink-0 group relative select-none touch-none h-[calc(100vh-4rem)] sticky top-8 z-30 mx-1"
+          title="Drag to resize • Double-click to reset (52/48)"
+        >
+          {/* Visual Divider Line */}
+          <div
+            className={`w-1 rounded-full h-full transition-all duration-150 ${
+              isDragging
+                ? "bg-[#E4DA72] shadow-[0_0_14px_rgba(228,218,114,0.9)] scale-x-125"
+                : "bg-[#9564DD]/30 group-hover:bg-[#E4DA72]/80 group-hover:shadow-[0_0_10px_rgba(228,218,114,0.6)]"
+            }`}
+          />
+
+          {/* Floating Center Grab Handle Pill */}
+          <div
+            className={`absolute top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-12 rounded-full border transition-all duration-200 shadow-xl backdrop-blur-md ${
+              isDragging
+                ? "bg-[#E4DA72] text-[#0A0518] border-white scale-110 shadow-neon-yellow"
+                : "bg-[#0A0518]/90 text-[#EEEEEE]/70 border-[#9564DD]/50 group-hover:border-[#E4DA72] group-hover:text-[#E4DA72] group-hover:scale-105"
+            }`}
+          >
+            <GripVertical className="w-3.5 h-3.5" />
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN: Sticky Inline Preview Studio */}
+        <section
+          className={`sticky top-8 h-[calc(100vh-4rem)] hidden lg:block shrink-0 transition-none ${
+            isDragging ? "pointer-events-none" : ""
+          }`}
+          style={{
+            width: isLgScreen ? `calc(${100 - splitPercent}% - 2rem)` : "100%",
+            maxWidth: isLgScreen ? `calc(${100 - splitPercent}% - 2rem)` : "100%",
+          }}
+        >
           {selectedTest ? (
             <PdfStudio
               test={selectedTest}
@@ -293,12 +445,16 @@ export default function StudioPage() {
                 const found = topics.find((t) => t.canonical_key === key);
                 if (found) handleSelectTopic(found);
               }}
+              isExpanded={false}
+              onToggleExpand={() => setIsStudioExpanded(true)}
             />
           ) : selectedTopic ? (
             <TopicDetailStudio
               topic={selectedTopic}
               onClose={() => setSelectedTopic(null)}
               onInspectTest={handleInspectTestFromTopic}
+              isExpanded={false}
+              onToggleExpand={() => setIsStudioExpanded(true)}
             />
           ) : (
             <CleanHud
