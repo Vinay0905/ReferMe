@@ -16,10 +16,16 @@ db_context = MongoDB()
 
 async def connect_to_mongo():
     settings = get_settings()
-    logger.info("Connecting to MongoDB...")
+    client_kwargs = {"serverSelectionTimeoutMS": 5000}
+    try:
+        import certifi
+        client_kwargs["tlsCAFile"] = certifi.where()
+    except Exception:
+        pass
+
     db_context.client = AsyncIOMotorClient(
         settings.MONGODB_URI,
-        serverSelectionTimeoutMS=5000
+        **client_kwargs
     )
     db_context.db = db_context.client[settings.MONGODB_DB_NAME]
     try:

@@ -107,3 +107,24 @@ async def test_question_ingestion_and_api(tmp_path, monkeypatch):
             assert resp5.status_code == 200
             assert resp5.json()["total"] == 0
             assert resp5.json()["items"] == []
+
+        # ---------------------------------------------------------------------
+        # Test API: GET /api/v1/tests/{test_identifier}/questions
+        # ---------------------------------------------------------------------
+        resp_test_q = await http_client.get(f"/api/v1/tests/{test_id}/questions")
+        assert resp_test_q.status_code == 200
+        test_q_data = resp_test_q.json()
+        assert test_q_data["total"] == len(questions)
+        assert len(test_q_data["items"]) == len(questions)
+        assert test_q_data["items"][0]["question_number"] == 1
+        assert test_q_data["items"][0]["test_id"] == test_id
+
+        # Query by external_test_id
+        ext_id = tests[0].external_test_id
+        resp_ext = await http_client.get(f"/api/v1/tests/{ext_id}/questions")
+        assert resp_ext.status_code == 200
+        assert resp_ext.json()["total"] == len(questions)
+
+        # 404 for non-existent test
+        resp_404 = await http_client.get("/api/v1/tests/non_existent_test_999/questions")
+        assert resp_404.status_code == 404

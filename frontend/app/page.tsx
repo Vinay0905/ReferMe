@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { api, TestItem, TopicItem, TestTopicsGrouped } from "@/lib/api";
+import { api, TestItem, TopicItem, TestTopicsGrouped, QuestionItem } from "@/lib/api";
 import { ControlCenter } from "@/components/ControlCenter";
 import { TopicCard } from "@/components/TopicCard";
 import { TestCard } from "@/components/TestCard";
 import { CleanHud } from "@/components/CleanHud";
 import { PdfStudio } from "@/components/PdfStudio";
 import { TopicDetailStudio } from "@/components/TopicDetailStudio";
+import { TestModeStudio } from "@/components/TestModeStudio";
+import { getInitialAppState, persistAppState, TestSessionState } from "@/lib/stateSync";
 import { RefreshCw, AlertCircle, GraduationCap, GripVertical } from "lucide-react";
 
 export default function StudioPage() {
@@ -34,7 +36,102 @@ export default function StudioPage() {
   const [isStudioExpanded, setIsStudioExpanded] = useState<boolean>(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
 
-  // Initial Load & Screen Size Listener
+  // Interactive Test Mode State
+  const [testSession, setTestSession] = useState<TestSessionState | null>(null);
+  const [testQuestions, setTestQuestions] = useState<QuestionItem[]>([]);
+  const [testTitle, setTestTitle] = useState<string>("");
+  const [testSubject, setTestSubject] = useState<string>("Physics");
+
+  // Select a Test
+  const handleSelectTest = async (test: TestItem, kind: "syllabus" | "question_paper" = "syllabus") => {
+    setSelectedTopic(null);
+    setSelectedTest(test);
+    setPreviewKind(kind);
+
+    try {
+      const grouped = await api.getTestTopics(test.external_test_id);
+      setSelectedTestTopics(grouped);
+    } catch (err) {
+      console.error("Failed to load test topics", err);
+      setSelectedTestTopics(null);
+    }
+  };
+
+  // Select a Topic
+  const handleSelectTopic = (topic: TopicItem) => {
+    setSelectedTest(null);
+    setSelectedTestTopics(null);
+    setSelectedTopic(topic);
+  };
+
+  // Quick navigation from topic detail or breakdown to a test
+  const handleInspectTestFromTopic = (testId: string) => {
+    const found = tests.find((t) => t.external_test_id === testId);
+    if (found) {
+      handleSelectTest(found, "syllabus");
+    } else {
+      api.getTestById(testId).then((fullTest) => {
+        handleSelectTest(fullTest, "syllabus");
+      });
+    }
+  };
+
+  // Launch Test Mode for a Topic
+  const handleStartTopicTest = (questions: QuestionItem[], title: string, subject: string) => {
+    if (!questions || questions.length === 0) return;
+    setTestQuestions(questions);
+    setTestTitle(title);
+    setTestSubject(subject);
+    setTestSession({
+      active: true,
+      type: "topic",
+      identifier: selectedTopic?.canonical_key || title,
+      title,
+      currentIndex: 0,
+      answers: {},
+    });
+  };
+
+  // Launch Test Mode for a Test Paper
+  const handleStartPaperTest = async () => {
+    if (!selectedTest) return;
+    try {
+      const res = await api.getTestQuestions(selectedTest.external_test_id, { pageSize: 250 });
+      if (res.items && res.items.length > 0) {
+        setTestQuestions(res.items);
+        setTestTitle(selectedTest.name);
+        setTestSubject("Full Paper");
+        setTestSession({
+          active: true,
+          type: "test",
+          identifier: selectedTest.external_test_id,
+          title: selectedTest.name,
+          currentIndex: 0,
+          answers: {},
+        });
+      } else {
+        alert("No questions have been extracted for this test paper yet.");
+      }
+    } catch (err) {
+      console.error("Failed to load questions for test paper", err);
+    }
+  };
+
+  // Close Test Mode completely and clear session & URL params
+  const handleCloseTestMode = () => {
+    setTestSession(null);
+    setTestQuestions([]);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("testMode");
+      url.searchParams.delete("testType");
+      url.searchParams.delete("testId");
+      url.searchParams.delete("testQ");
+      window.history.replaceState(null, "", url.pathname + (url.search ? url.search : ""));
+    }
+  };
+
+  // Initial Load & State Restoration
   const loadData = async () => {
     setLoading(true);
     setError(null);
@@ -45,6 +142,78 @@ export default function StudioPage() {
       ]);
       setTests(testsRes.items);
       setTopics(topicsRes.items);
+
+      // Hydrate state from URL query params & localStorage
+      const saved = getInitialAppState();
+      if (saved.selectedClass) setSelectedClass(saved.selectedClass);
+      if (saved.viewMode) setViewMode(saved.viewMode);
+      if (saved.selectedSubject) setSelectedSubject(saved.selectedSubject);
+      if (saved.searchQuery) setSearchQuery(saved.searchQuery);
+      if (saved.previewKind) setPreviewKind(saved.previewKind as "syllabus" | "question_paper");
+      if (saved.isStudioExpanded) setIsStudioExpanded(saved.isStudioExpanded);
+
+      // Restore active topic if present
+      if (saved.selectedTopicKey) {
+        const foundTopic = topicsRes.items.find(
+          (t) => t.canonical_key === saved.selectedTopicKey
+        );
+        if (foundTopic) {
+          setSelectedTopic(foundTopic);
+        } else {
+          api
+            .getTopicById(saved.selectedTopicKey)
+            .then((t) => {
+              if (t) setSelectedTopic(t);
+            })
+            .catch(() => {});
+        }
+      }
+
+      // Restore active test if present
+      if (saved.selectedTestId) {
+        const foundTest = testsRes.items.find(
+          (t) => t.external_test_id === saved.selectedTestId
+        );
+        if (foundTest) {
+          handleSelectTest(foundTest, (saved.previewKind as any) || "syllabus");
+        } else {
+          api
+            .getTestById(saved.selectedTestId)
+            .then((t) => {
+              if (t) handleSelectTest(t, (saved.previewKind as any) || "syllabus");
+            })
+            .catch(() => {});
+        }
+      }
+
+      // Restore active Test Mode session if user was in a test before reload
+      if (saved.testSession && saved.testSession.active && saved.testSession.identifier) {
+        if (saved.testSession.type === "topic") {
+          api
+            .getTopicQuestions(saved.testSession.identifier, { pageSize: 100 })
+            .then((qRes) => {
+              if (qRes.items.length > 0) {
+                setTestQuestions(qRes.items);
+                setTestTitle(saved.testSession?.title || saved.testSession!.identifier);
+                setTestSubject(qRes.items[0]?.subject || "Physics");
+                setTestSession(saved.testSession);
+              }
+            })
+            .catch(() => {});
+        } else {
+          api
+            .getTestQuestions(saved.testSession.identifier, { pageSize: 250 })
+            .then((qRes) => {
+              if (qRes.items.length > 0) {
+                setTestQuestions(qRes.items);
+                setTestTitle(saved.testSession?.title || saved.testSession!.identifier);
+                setTestSubject("Full Paper");
+                setTestSession(saved.testSession);
+              }
+            })
+            .catch(() => {});
+        }
+      }
     } catch (err: any) {
       console.error("Failed to load catalog data", err);
       setError("Unable to connect to the backend server. Please ensure the FastAPI backend is running on port 8000.");
@@ -71,6 +240,34 @@ export default function StudioPage() {
       return () => window.removeEventListener("resize", checkLg);
     }
   }, []);
+
+  // Synchronize state changes to URL query parameters & localStorage
+  useEffect(() => {
+    if (loading) return; // Do not overwrite while initial catalog data is loading
+
+    persistAppState({
+      selectedClass,
+      viewMode,
+      selectedSubject,
+      searchQuery,
+      selectedTopicKey: selectedTopic?.canonical_key || null,
+      selectedTestId: selectedTest?.external_test_id || null,
+      previewKind,
+      isStudioExpanded,
+      testSession,
+    });
+  }, [
+    loading,
+    selectedClass,
+    viewMode,
+    selectedSubject,
+    searchQuery,
+    selectedTopic,
+    selectedTest,
+    previewKind,
+    isStudioExpanded,
+    testSession,
+  ]);
 
   // Keyboard shortcut to exit full window
   useEffect(() => {
@@ -137,7 +334,6 @@ export default function StudioPage() {
   // Filtered Tests
   const filteredTests = useMemo(() => {
     return tests.filter((t) => {
-      // If target_class is specified on test, filter accordingly; otherwise default to 12th (Leader)
       const testClass = t.target_class?.toLowerCase() || "12th";
       const matchesClass =
         selectedClass === "all" || testClass === selectedClass.toLowerCase();
@@ -153,41 +349,7 @@ export default function StudioPage() {
     });
   }, [tests, selectedClass, searchQuery]);
 
-  // Select a Test
-  const handleSelectTest = async (test: TestItem, kind: "syllabus" | "question_paper" = "syllabus") => {
-    setSelectedTopic(null);
-    setSelectedTest(test);
-    setPreviewKind(kind);
-
-    try {
-      const grouped = await api.getTestTopics(test.external_test_id);
-      setSelectedTestTopics(grouped);
-    } catch (err) {
-      console.error("Failed to load test topics", err);
-      setSelectedTestTopics(null);
-    }
-  };
-
-  // Select a Topic
-  const handleSelectTopic = (topic: TopicItem) => {
-    setSelectedTest(null);
-    setSelectedTestTopics(null);
-    setSelectedTopic(topic);
-  };
-
-  // Quick navigation from topic detail or breakdown to a test
-  const handleInspectTestFromTopic = (testId: string) => {
-    const found = tests.find((t) => t.external_test_id === testId);
-    if (found) {
-      handleSelectTest(found, "syllabus");
-    } else {
-      api.getTestById(testId).then((fullTest) => {
-        handleSelectTest(fullTest, "syllabus");
-      });
-    }
-  };
-
-  // Topics belonging to the active class selection (independent of search query / subject filter)
+  // Topics belonging to the active class selection
   const classTopics = useMemo(() => {
     return topics.filter((t) => {
       if (selectedClass === "all") return true;
@@ -195,7 +357,7 @@ export default function StudioPage() {
     });
   }, [topics, selectedClass]);
 
-  // Tests belonging to the active class selection (independent of search query)
+  // Tests belonging to the active class selection
   const classTests = useMemo(() => {
     return tests.filter((t) => {
       if (selectedClass === "all") return true;
@@ -204,7 +366,7 @@ export default function StudioPage() {
     });
   }, [tests, selectedClass]);
 
-  // Subject Counts for HUD (scoped to currently selected class)
+  // Subject Counts for HUD
   const classSubjectMetrics = useMemo(() => {
     let phys = 0;
     let chem = 0;
@@ -220,6 +382,19 @@ export default function StudioPage() {
 
   return (
     <main className="min-h-screen p-4 md:p-8 max-w-[1700px] mx-auto">
+      {/* INTERACTIVE TEST MODE STUDIO OVERLAY */}
+      {testSession && testSession.active && testQuestions.length > 0 && (
+        <TestModeStudio
+          title={testTitle || "NEET Practice Test"}
+          subtitle={testSession.identifier}
+          subject={testSubject}
+          questions={testQuestions}
+          initialSession={testSession}
+          onSaveSession={(updated) => setTestSession(updated)}
+          onClose={handleCloseTestMode}
+        />
+      )}
+
       {/* FULL WINDOW STUDIO FOCUS MODE */}
       {isStudioExpanded && (selectedTest || selectedTopic) && (
         <div className="fixed inset-0 z-50 bg-[#0A0518]/95 backdrop-blur-2xl p-3 md:p-6 flex flex-col animate-in fade-in zoom-in-95 duration-200">
@@ -238,6 +413,7 @@ export default function StudioPage() {
                   const found = topics.find((t) => t.canonical_key === key);
                   if (found) handleSelectTopic(found);
                 }}
+                onStartTestMode={handleStartPaperTest}
                 isExpanded={true}
                 onToggleExpand={() => setIsStudioExpanded(false)}
               />
@@ -249,6 +425,7 @@ export default function StudioPage() {
                   setIsStudioExpanded(false);
                 }}
                 onInspectTest={handleInspectTestFromTopic}
+                onStartTestMode={handleStartTopicTest}
                 isExpanded={true}
                 onToggleExpand={() => setIsStudioExpanded(false)}
               />
@@ -445,6 +622,7 @@ export default function StudioPage() {
                 const found = topics.find((t) => t.canonical_key === key);
                 if (found) handleSelectTopic(found);
               }}
+              onStartTestMode={handleStartPaperTest}
               isExpanded={false}
               onToggleExpand={() => setIsStudioExpanded(true)}
             />
@@ -453,6 +631,7 @@ export default function StudioPage() {
               topic={selectedTopic}
               onClose={() => setSelectedTopic(null)}
               onInspectTest={handleInspectTestFromTopic}
+              onStartTestMode={handleStartTopicTest}
               isExpanded={false}
               onToggleExpand={() => setIsStudioExpanded(true)}
             />
@@ -485,12 +664,14 @@ export default function StudioPage() {
                   const found = topics.find((t) => t.canonical_key === key);
                   if (found) handleSelectTopic(found);
                 }}
+                onStartTestMode={handleStartPaperTest}
               />
             ) : selectedTopic ? (
               <TopicDetailStudio
                 topic={selectedTopic}
                 onClose={() => setSelectedTopic(null)}
                 onInspectTest={handleInspectTestFromTopic}
+                onStartTestMode={handleStartTopicTest}
               />
             ) : null}
           </div>

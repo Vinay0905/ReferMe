@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { TestItem, TestTopicsGrouped, api } from "@/lib/api";
-import { ExternalLink, X, FileText, CheckCircle2, AlertCircle, ListFilter, Download, Maximize2, Minimize2 } from "lucide-react";
+import { ExternalLink, X, FileText, CheckCircle2, AlertCircle, ListFilter, Download, Maximize2, Minimize2, Play } from "lucide-react";
 
 interface PdfStudioProps {
   test: TestItem;
@@ -12,6 +12,7 @@ interface PdfStudioProps {
   onSelectTopic?: (canonicalKey: string) => void;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
+  onStartTestMode?: () => void;
 }
 
 export const PdfStudio: React.FC<PdfStudioProps> = ({
@@ -22,6 +23,7 @@ export const PdfStudio: React.FC<PdfStudioProps> = ({
   onSelectTopic,
   isExpanded = false,
   onToggleExpand,
+  onStartTestMode,
 }) => {
   const [activeTab, setActiveTab] = useState<"syllabus" | "question_paper" | "breakdown">(initialKind);
 
@@ -45,6 +47,16 @@ export const PdfStudio: React.FC<PdfStudioProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
+          {test.has_question_paper && onStartTestMode && (
+            <button
+              onClick={onStartTestMode}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#E4DA72] hover:bg-[#d4ca62] text-[#0A0518] font-bold text-xs transition-all shadow-neon-yellow"
+              title="Start Full Test Paper in Interactive Test Mode"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>Test Mode</span>
+            </button>
+          )}
           {activeTab !== "breakdown" && (
             <a
               href={pdfUrl}

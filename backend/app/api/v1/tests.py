@@ -1,11 +1,15 @@
 import re
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query, status
+from app.models.common import Subject
+from app.models.relationship import QuestionClassificationMethod
 from app.models.test import TestModel
+from app.repositories.question_repo import QuestionRepository
 from app.repositories.test_repo import TestRepository
 from app.repositories.test_topic_repo import TestTopicRepository
 from app.repositories.topic_repo import TopicRepository
 from app.schemas.common import PaginatedResponse
+from app.schemas.question import QuestionItemResponse
 from app.schemas.test import (
     TestDetailResponse,
     TestResponse,
@@ -164,3 +168,70 @@ async def get_test_topics(
         total_topics=len(rels),
         subjects=subjects_dict,
     )
+
+
+@router.get("/{test_identifier}/questions", response_model=PaginatedResponse[QuestionItemResponse])
+async def get_test_questions(
+    test_identifier: str,
+    subject: Optional[str] = Query(None, description="Filter by subject: physics, chemistry, biology"),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(200, ge=1, le=500, description="Items per page"),
+):
+    """Retrieves all questions belonging to this test paper, ordered by question number."""
+    test_repo = TestRepository()
+    test = await test_repo.get_by_id_or_external_id(test_identifier)
+    if not test:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Test '{test_identifier}' not found."
+        )
+
+    question_repo = QuestionRepository()
+    filter_query: Dict[str, Any] = {
+        "$or": [
+            {"test_id": str(test.id)},
+            {"external_test_id": test.external_test_id}
+        ]
+    }
+
+    if subject:
+        s_lower = subject.lower()
+        if s_lower == "physics":
+            filter_query["subject"] = Subject.PHYSICS
+        elif s_lower == "chemistry":
+            filter_query["subject"] = Subject.CHEMISTRY
+        elif s_lower == "biology":
+            filter_query["subject"] = Subject.BIOLOGY
+
+    total = await question_repo.count(filter_query)
+    skip = (page - 1) * page_size
+    questions = await question_repo.find_all(
+        filter_query,
+        skip=skip,
+        limit=page_size,
+        sort=[("question_number", 1)]
+    )
+
+    items: List[QuestionItemResponse] = [
+        QuestionItemResponse(
+            id=str(q.id),
+            test_id=str(test.id),
+            external_test_id=test.external_test_id,
+            test_name=test.name,
+            question_number=q.question_number,
+            subject_question_number=q.subject_question_number,
+            subject=q.subject,
+            question_text=q.question_text,
+            options=q.options or [],
+            answer=q.answer,
+            source_page=q.source_page,
+            bounding_box=q.bounding_box,
+            image_url=q.image_url or f"/api/v1/questions/{str(q.id)}/image",
+            canonical_key=getattr(q, "canonical_key", "") or "",
+            classification_method=getattr(q, "classification_method", QuestionClassificationMethod.DETERMINISTIC),
+            confidence=getattr(q, "confidence", 1.0),
+        )
+        for q in questions
+    ]
+
+    return PaginatedResponse.create(items=items, total=total, page=page, page_size=page_size)

@@ -21,10 +21,12 @@ async def create_indexes():
         IndexModel([("processing_status", ASCENDING)], name="idx_tests_status")
     ])
 
-    # topics: unique canonical_key, subject + name
+    # topics: unique canonical_key, subject + name, active + test_count sort index
     await db["topics"].create_indexes([
         IndexModel([("canonical_key", ASCENDING)], unique=True, name="idx_topics_canonical_key_unique"),
-        IndexModel([("subject", ASCENDING), ("name", ASCENDING)], name="idx_topics_subject_name")
+        IndexModel([("subject", ASCENDING), ("name", ASCENDING)], name="idx_topics_subject_name"),
+        IndexModel([("active", ASCENDING), ("test_count", -1)], name="idx_topics_active_test_count"),
+        IndexModel([("active", ASCENDING), ("subject", ASCENDING), ("test_count", -1)], name="idx_topics_active_subject_test_count"),
     ])
 
     # test_topics: unique (test_id, topic_id), topic_id lookup, test_id lookup

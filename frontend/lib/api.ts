@@ -216,6 +216,24 @@ export const api = {
     );
   },
 
+  async getTestQuestions(
+    testIdentifier: string,
+    params: {
+      subject?: string;
+      page?: number;
+      pageSize?: number;
+    } = {}
+  ): Promise<PaginatedResponse<QuestionItem>> {
+    const search = new URLSearchParams();
+    if (params.subject) search.set("subject", params.subject);
+    if (params.page) search.set("page", params.page.toString());
+    if (params.pageSize) search.set("page_size", params.pageSize.toString());
+
+    return cachedFetch<PaginatedResponse<QuestionItem>>(
+      `${API_BASE}/tests/${encodeURIComponent(testIdentifier)}/questions?${search.toString()}`
+    );
+  },
+
   getArtifactPdfUrl(testId: string, kind: "syllabus" | "question_paper"): string {
 
     return `${API_BASE}/tests/${testId}/artifacts/${kind}`;

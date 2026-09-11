@@ -26,6 +26,28 @@ class TestRepository(BaseRepository[TestModel]):
         # Try as allen external_test_id
         return await self.get_by_external_id("allen", identifier)
 
+    async def get_by_ids(self, test_ids: list[str]) -> list[TestModel]:
+        if not test_ids:
+            return []
+        from bson import ObjectId
+        object_ids = [ObjectId(tid) for tid in test_ids if ObjectId.is_valid(tid)]
+        string_ids = [tid for tid in test_ids if not ObjectId.is_valid(tid)]
+
+        query = {"$or": []}
+        if object_ids:
+            query["$or"].append({"_id": {"$in": object_ids}})
+        if string_ids:
+            query["$or"].append({"_id": {"$in": string_ids}})
+            query["$or"].append({"external_test_id": {"$in": string_ids}})
+        if not query["$or"]:
+            return []
+
+        cursor = self.collection.find(query)
+        items: list[TestModel] = []
+        async for doc in cursor:
+            items.append(self.model_cls(**doc))
+        return items
+
     async def upsert(self, test: TestModel) -> str:
         doc = test.model_dump(by_alias=True, exclude={"id"})
         result = await self.collection.update_one(

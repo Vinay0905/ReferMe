@@ -212,13 +212,14 @@ async def get_topic_questions(
     questions = await question_repo.get_by_ids(q_ids)
     q_by_id = {str(q.id): q for q in questions}
 
-    # Batch fetch tests by ID
-    unique_test_ids = {r.test_id for r in rels}
+    # Batch fetch tests by ID in one single query (no sequential N+1 roundtrips!)
+    unique_test_ids = list({r.test_id for r in rels if r.test_id})
     test_names_by_id: Dict[str, str] = {}
-    for tid in unique_test_ids:
-        t_doc = await test_repo.get_by_id(tid)
-        if t_doc:
-            test_names_by_id[tid] = t_doc.name
+    if unique_test_ids:
+        test_docs = await test_repo.get_by_ids(unique_test_ids)
+        for t in test_docs:
+            test_names_by_id[str(t.id)] = t.name
+            test_names_by_id[t.external_test_id] = t.name
 
     items: List[QuestionItemResponse] = []
     for r in rels:

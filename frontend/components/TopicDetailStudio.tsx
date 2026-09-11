@@ -18,6 +18,8 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
+  Play,
+  Trophy,
 } from "lucide-react";
 
 interface TopicDetailStudioProps {
@@ -26,6 +28,7 @@ interface TopicDetailStudioProps {
   onInspectTest: (testId: string) => void;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
+  onStartTestMode?: (questions: QuestionItem[], title: string, subject: string) => void;
 }
 
 export const TopicDetailStudio: React.FC<TopicDetailStudioProps> = ({
@@ -34,6 +37,7 @@ export const TopicDetailStudio: React.FC<TopicDetailStudioProps> = ({
   onInspectTest,
   isExpanded = false,
   onToggleExpand,
+  onStartTestMode,
 }) => {
   const [activeTab, setActiveTab] = useState<"questions" | "tests">("questions");
 
@@ -147,6 +151,16 @@ export const TopicDetailStudio: React.FC<TopicDetailStudioProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {questions.length > 0 && onStartTestMode && (
+            <button
+              onClick={() => onStartTestMode(questions, topic.name, topic.subject)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#E4DA72] hover:bg-[#d4ca62] text-[#0A0518] font-bold text-xs transition-all shadow-neon-yellow"
+              title="Start Question-by-Question NEET Test Mode"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>Take Test ({questions.length})</span>
+            </button>
+          )}
           {onToggleExpand && (
             <button
               onClick={onToggleExpand}
